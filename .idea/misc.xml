@@ -6,5 +6,6 @@
   </component>
   <component name="ProjectType">
     <option name="id" value="Android" />
+    <output url="file://$PROJECT_DIR$/out" />
   </component>
 </project>

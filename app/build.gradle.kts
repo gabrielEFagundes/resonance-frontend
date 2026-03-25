@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.music.resonance"
-    compileSdk = 35
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.music.resonance"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
@@ -40,7 +40,7 @@ android {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.10"
+        kotlinCompilerExtensionVersion = "1.5.1"
     }
     packaging {
         resources {

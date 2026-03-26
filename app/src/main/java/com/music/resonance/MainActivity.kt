@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.music.resonance.ui.screens.AlbumScreen
 import com.music.resonance.ui.screens.ArtistScreen
+import com.music.resonance.ui.screens.MusicScreen
 import com.music.resonance.ui.screens.UserScreen
 import com.music.resonance.ui.screens.sampleAlbumDetailById
 import com.music.resonance.ui.screens.sampleArtistProfileById
@@ -57,6 +58,7 @@ import com.music.resonance.ui.theme.ResonanceTheme
 private sealed class ResonanceRoute {
     data object Library : ResonanceRoute()
     data object User : ResonanceRoute()
+    data object Music : ResonanceRoute()
     data class Artist(val artistId: String) : ResonanceRoute()
     data class Album(val albumId: String, val popToArtistId: String?) : ResonanceRoute()
 }
@@ -73,10 +75,12 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     var route by remember { mutableStateOf<ResonanceRoute>(ResonanceRoute.Library) }
+                    var librarySelectedFilter by remember { mutableStateOf("Álbuns") }
                     BackHandler(enabled = route != ResonanceRoute.Library) {
                         route = when (val r = route) {
                             ResonanceRoute.Library -> ResonanceRoute.Library
                             ResonanceRoute.User -> ResonanceRoute.Library
+                            ResonanceRoute.Music -> ResonanceRoute.Library
                             is ResonanceRoute.Artist -> ResonanceRoute.Library
                             is ResonanceRoute.Album -> r.popToArtistId?.let { ResonanceRoute.Artist(it) }
                                 ?: ResonanceRoute.Library
@@ -84,6 +88,8 @@ class MainActivity : ComponentActivity() {
                     }
                     when (val r = route) {
                         ResonanceRoute.Library -> MusicLibraryScreen(
+                            selectedFilter = librarySelectedFilter,
+                            onSelectedFilterChange = { librarySelectedFilter = it },
                             onAlbumOpen = { albumId ->
                                 if (sampleAlbumDetailById(albumId) != null) {
                                     route = ResonanceRoute.Album(albumId, popToArtistId = null)
@@ -96,10 +102,25 @@ class MainActivity : ComponentActivity() {
                             },
                             onUserIconClick = {
                                 route = ResonanceRoute.User
+                            },
+                            onMusicOpen = {
+                                route = ResonanceRoute.Music
                             }
                         )
                         ResonanceRoute.User -> UserScreen(
                             onBack = { route = ResonanceRoute.Library }
+                        )
+                        ResonanceRoute.Music -> MusicScreen(
+                            onBack = { route = ResonanceRoute.Library },
+                            onUserIconClick = { route = ResonanceRoute.User },
+                            onAlbumsClick = {
+                                librarySelectedFilter = "Álbuns"
+                                route = ResonanceRoute.Library
+                            },
+                            onArtistsClick = {
+                                librarySelectedFilter = "Artistas"
+                                route = ResonanceRoute.Library
+                            }
                         )
                         is ResonanceRoute.Artist -> {
                             val profile = sampleArtistProfileById(r.artistId)
@@ -144,14 +165,16 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MusicLibraryScreen(
+    selectedFilter: String,
+    onSelectedFilterChange: (String) -> Unit,
     onAlbumOpen: (String) -> Unit,
     onArtistOpen: (String) -> Unit,
     onUserIconClick: () -> Unit,
+    onMusicOpen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val albumSections = remember { sampleAlbumSections() }
     val artistSections = remember { sampleArtistSections() }
-    var selectedFilter by remember { mutableStateOf("Álbuns") }
     val currentSections = if (selectedFilter == "Álbuns") albumSections else artistSections
 
 
@@ -172,7 +195,8 @@ fun MusicLibraryScreen(
             Spacer(modifier = Modifier.height(14.dp))
             FilterToggle(
                 selected = selectedFilter,
-                onSelected = { selectedFilter = it }
+                onSelected = onSelectedFilterChange,
+                onMusicOpen = onMusicOpen
             )
             Spacer(modifier = Modifier.height(10.dp))
             LibrarySections(
@@ -272,7 +296,8 @@ private fun SearchBar() {
 @Composable
 private fun FilterToggle(
     selected: String,
-    onSelected: (String) -> Unit
+    onSelected: (String) -> Unit,
+    onMusicOpen: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -290,6 +315,12 @@ private fun FilterToggle(
             title = "Artistas",
             isSelected = selected == "Artistas",
             onClick = { onSelected("Artistas") }
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        FilterPill(
+            title = "Músicas",
+            isSelected = false,
+            onClick = onMusicOpen
         )
     }
 }
@@ -567,7 +598,13 @@ private fun sampleArtistSections(): List<AlbumSection> {
 @Composable
 fun MusicLibraryPreview() {
     ResonanceTheme {
-        MusicLibraryScreen(onAlbumOpen = {}, onArtistOpen = {}, onUserIconClick = {})
+        MusicLibraryScreen(
+            selectedFilter = "Álbuns",
+            onSelectedFilterChange = {},
+            onAlbumOpen = {},
+            onArtistOpen = {},
+            onUserIconClick = {},
+            onMusicOpen = {}
+        )
     }
 }
-

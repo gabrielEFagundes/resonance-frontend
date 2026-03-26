@@ -1,5 +1,6 @@
 package com.music.resonance.ui.screens
 
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -33,11 +34,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.music.resonance.ui.theme.ResonanceTheme
 
+
 data class AlbumTrackUi(
     val number: Int,
     val title: String,
     val duration: String
 )
+
 
 data class AlbumDetailUi(
     val id: String,
@@ -49,9 +52,12 @@ data class AlbumDetailUi(
     val tracks: List<AlbumTrackUi>
 )
 
+
 private val secondaryTrackText = Color(0xFF9BA1AB)
 
+
 fun sampleAlbumDetailById(id: String): AlbumDetailUi? = albumDetailsById[id]
+
 
 private val albumDetailsById: Map<String, AlbumDetailUi> = buildMap {
     put(
@@ -172,13 +178,63 @@ private val albumDetailsById: Map<String, AlbumDetailUi> = buildMap {
             tracks = defaultTracksFor("The Eminem Show")
         )
     )
+    put(
+        "un-verano-sin-ti",
+        AlbumDetailUi(
+            id = "un-verano-sin-ti",
+            title = "Un Verano Sin Ti",
+            artist = "Bad Bunny",
+            year = 2022,
+            coverGradientStart = 0xFF7F1D1DL,
+            coverGradientEnd = 0xFFFECADAL,
+            tracks = defaultTracksFor("Un Verano Sin Ti")
+        )
+    )
+    put(
+        "nadie-sabe",
+        AlbumDetailUi(
+            id = "nadie-sabe",
+            title = "Nadie Sabe Lo Que Pasará Mañana",
+            artist = "Bad Bunny",
+            year = 2023,
+            coverGradientStart = 0xFF1E293BL,
+            coverGradientEnd = 0xFF475569L,
+            tracks = defaultTracksFor("Nadie Sabe Lo Que Pasará Mañana")
+        )
+    )
+    put(
+        "artist-demo-album-1",
+        AlbumDetailUi(
+            id = "artist-demo-album-1",
+            title = "Seleção — Vol. 1",
+            artist = "Artista",
+            year = 2024,
+            coverGradientStart = 0xFF334155L,
+            coverGradientEnd = 0xFF0F172AL,
+            tracks = defaultTracksFor("Seleção — Vol. 1")
+        )
+    )
+    put(
+        "artist-demo-album-2",
+        AlbumDetailUi(
+            id = "artist-demo-album-2",
+            title = "Ao vivo",
+            artist = "Artista",
+            year = 2023,
+            coverGradientStart = 0xFF57534EL,
+            coverGradientEnd = 0xFF78716CL,
+            tracks = defaultTracksFor("Ao vivo")
+        )
+    )
 }
+
 
 private fun defaultTracksFor(albumTitle: String): List<AlbumTrackUi> = listOf(
     AlbumTrackUi(1, "$albumTitle — faixa 1", "3:12"),
     AlbumTrackUi(2, "$albumTitle — faixa 2", "3:45"),
     AlbumTrackUi(3, "$albumTitle — faixa 3", "4:01")
 )
+
 
 @Composable
 fun AlbumDetailScreen(
@@ -188,6 +244,7 @@ fun AlbumDetailScreen(
 ) {
     val coverStart = Color(detail.coverGradientStart.toInt())
     val coverEnd = Color(detail.coverGradientEnd.toInt())
+
 
     Box(
         modifier = modifier
@@ -286,6 +343,20 @@ fun AlbumDetailScreen(
         }
     }
 }
+
+@Composable
+fun AlbumScreen(
+    detail: AlbumDetailUi,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AlbumDetailScreen(
+        detail = detail,
+        onBack = onBack,
+        modifier = modifier
+    )
+}
+
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable

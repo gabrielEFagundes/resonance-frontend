@@ -1,5 +1,6 @@
 package com.music.resonance
 
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -44,60 +46,127 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.music.resonance.ui.screens.AlbumScreen
+import com.music.resonance.ui.screens.ArtistScreen
 import com.music.resonance.ui.screens.UserScreen
+import com.music.resonance.ui.screens.sampleAlbumDetailById
+import com.music.resonance.ui.screens.sampleArtistProfileById
 import com.music.resonance.ui.theme.ResonanceTheme
+
+
+private sealed class ResonanceRoute {
+    data object Library : ResonanceRoute()
+    data object User : ResonanceRoute()
+    data class Artist(val artistId: String) : ResonanceRoute()
+    data class Album(val albumId: String, val popToArtistId: String?) : ResonanceRoute()
+}
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             ResonanceTheme {
+                // A surface container using the 'background' color from the theme
                 Surface(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().background(color = Color(0xFF1B1D22)).safeDrawingPadding(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    ResonanceApp()
+                    var route by remember { mutableStateOf<ResonanceRoute>(ResonanceRoute.Library) }
+                    BackHandler(enabled = route != ResonanceRoute.Library) {
+                        route = when (val r = route) {
+                            ResonanceRoute.Library -> ResonanceRoute.Library
+                            ResonanceRoute.User -> ResonanceRoute.Library
+                            is ResonanceRoute.Artist -> ResonanceRoute.Library
+                            is ResonanceRoute.Album -> r.popToArtistId?.let { ResonanceRoute.Artist(it) }
+                                ?: ResonanceRoute.Library
+                        }
+                    }
+                    when (val r = route) {
+                        ResonanceRoute.Library -> MusicLibraryScreen(
+                            onAlbumOpen = { albumId ->
+                                if (sampleAlbumDetailById(albumId) != null) {
+                                    route = ResonanceRoute.Album(albumId, popToArtistId = null)
+                                }
+                            },
+                            onArtistOpen = { artistId ->
+                                if (sampleArtistProfileById(artistId) != null) {
+                                    route = ResonanceRoute.Artist(artistId)
+                                }
+                            },
+                            onUserIconClick = {
+                                route = ResonanceRoute.User
+                            }
+                        )
+                        ResonanceRoute.User -> UserScreen(
+                            onBack = { route = ResonanceRoute.Library }
+                        )
+                        is ResonanceRoute.Artist -> {
+                            val profile = sampleArtistProfileById(r.artistId)
+                            if (profile != null) {
+                                ArtistScreen(
+                                    profile = profile,
+                                    onBack = { route = ResonanceRoute.Library },
+                                    onAlbumOpen = { albumId ->
+                                        if (sampleAlbumDetailById(albumId) != null) {
+                                            route = ResonanceRoute.Album(
+                                                albumId,
+                                                popToArtistId = r.artistId
+                                            )
+                                        }
+                                    }
+                                )
+                            } else {
+                                route = ResonanceRoute.Library
+                            }
+                        }
+                        is ResonanceRoute.Album -> {
+                            val detail = sampleAlbumDetailById(r.albumId)
+                            if (detail != null) {
+                                AlbumScreen(
+                                    detail = detail,
+                                    onBack = {
+                                        route = r.popToArtistId?.let { ResonanceRoute.Artist(it) }
+                                            ?: ResonanceRoute.Library
+                                    }
+                                )
+                            } else {
+                                route = ResonanceRoute.Library
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-@Composable
-private fun ResonanceApp() {
-    var showProfile by remember { mutableStateOf(false) }
-    BackHandler(enabled = showProfile) { showProfile = false }
-    if (showProfile) {
-        UserScreen(onBack = { showProfile = false })
-    } else {
-        MusicLibraryScreen(onNavigateToProfile = { showProfile = true })
-    }
-}
 
 @Composable
 fun MusicLibraryScreen(
-    modifier: Modifier = Modifier,
-    onNavigateToProfile: () -> Unit = {}
+    onAlbumOpen: (String) -> Unit,
+    onArtistOpen: (String) -> Unit,
+    onUserIconClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val albumSections = remember { sampleAlbumSections() }
     val artistSections = remember { sampleArtistSections() }
     var selectedFilter by remember { mutableStateOf("Álbuns") }
     val currentSections = if (selectedFilter == "Álbuns") albumSections else artistSections
 
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFFE6E6E6))
-            .padding(horizontal = 18.dp, vertical = 28.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(22.dp))
                 .background(Color(0xFF1B1D22))
                 .padding(top = 20.dp)
         ) {
-            HeaderSection(onUserIconClick = onNavigateToProfile)
+            HeaderSection(onUserIconClick = onUserIconClick)
             Spacer(modifier = Modifier.height(14.dp))
             SearchBar()
             Spacer(modifier = Modifier.height(14.dp))
@@ -106,13 +175,18 @@ fun MusicLibraryScreen(
                 onSelected = { selectedFilter = it }
             )
             Spacer(modifier = Modifier.height(10.dp))
-            LibrarySections(sections = currentSections)
+            LibrarySections(
+                sections = currentSections,
+                onAlbumOpen = if (selectedFilter == "Álbuns") onAlbumOpen else null,
+                onArtistOpen = if (selectedFilter == "Artistas") onArtistOpen else null
+            )
         }
     }
 }
 
+
 @Composable
-private fun HeaderSection(onUserIconClick: () -> Unit = {}) {
+private fun HeaderSection(onUserIconClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -168,6 +242,7 @@ private fun HeaderSection(onUserIconClick: () -> Unit = {}) {
     }
 }
 
+
 @Composable
 private fun SearchBar() {
     Row(
@@ -192,6 +267,7 @@ private fun SearchBar() {
         )
     }
 }
+
 
 @Composable
 private fun FilterToggle(
@@ -218,6 +294,7 @@ private fun FilterToggle(
     }
 }
 
+
 @Composable
 private fun FilterPill(
     title: String,
@@ -241,8 +318,13 @@ private fun FilterPill(
     }
 }
 
+
 @Composable
-private fun LibrarySections(sections: List<AlbumSection>) {
+private fun LibrarySections(
+    sections: List<AlbumSection>,
+    onAlbumOpen: ((String) -> Unit)?,
+    onArtistOpen: ((String) -> Unit)?
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 18.dp),
@@ -263,7 +345,12 @@ private fun LibrarySections(sections: List<AlbumSection>) {
                     contentPadding = PaddingValues(horizontal = 18.dp)
                 ) {
                     items(section.albums) { album ->
-                        AlbumCard(album = album)
+                        val openHandler = onAlbumOpen?.let { open -> { open(album.id) } }
+                            ?: onArtistOpen?.let { open -> { open(album.id) } }
+                        AlbumCard(
+                            album = album,
+                            onClick = openHandler
+                        )
                     }
                 }
             }
@@ -271,9 +358,16 @@ private fun LibrarySections(sections: List<AlbumSection>) {
     }
 }
 
+
 @Composable
-private fun AlbumCard(album: AlbumItem) {
-    Column(modifier = Modifier.width(140.dp)) {
+private fun AlbumCard(
+    album: AlbumItem,
+    onClick: (() -> Unit)?
+) {
+    val columnModifier = Modifier
+        .width(140.dp)
+        .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+    Column(modifier = columnModifier) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -310,17 +404,21 @@ private fun AlbumCard(album: AlbumItem) {
     }
 }
 
+
 private data class AlbumSection(
     val title: String,
     val albums: List<AlbumItem>
 )
 
+
 private data class AlbumItem(
+    val id: String,
     val name: String,
     val artist: String,
     val tag: String,
     val colors: List<Color>
 )
+
 
 private fun sampleAlbumSections(): List<AlbumSection> {
     return listOf(
@@ -328,18 +426,21 @@ private fun sampleAlbumSections(): List<AlbumSection> {
             title = "Popular",
             albums = listOf(
                 AlbumItem(
+                    id = "debi-tirar-mas-fotos",
                     name = "DeBi TIRAR MÁS FOTOs",
                     artist = "Bad Bunny",
                     tag = "BAD",
                     colors = listOf(Color(0xFF285439), Color(0xFF8BAE84))
                 ),
                 AlbumItem(
+                    id = "significant-other",
                     name = "Significant Other",
                     artist = "Limp Bizkit",
                     tag = "LB",
                     colors = listOf(Color(0xFF54317A), Color(0xFFE0715D))
                 ),
                 AlbumItem(
+                    id = "random-access-memories",
                     name = "Random Access Memories",
                     artist = "Daft Punk",
                     tag = "DP",
@@ -351,18 +452,21 @@ private fun sampleAlbumSections(): List<AlbumSection> {
             title = "Rock & Roll",
             albums = listOf(
                 AlbumItem(
+                    id = "dr-feelgood",
                     name = "Dr. Feelgood",
                     artist = "Motley Crue",
                     tag = "MC",
                     colors = listOf(Color(0xFF446D63), Color(0xFFC95E57))
                 ),
                 AlbumItem(
+                    id = "paranoid",
                     name = "Paranoid",
                     artist = "Black Sabbath",
                     tag = "BS",
                     colors = listOf(Color(0xFF19171D), Color(0xFFA53C27))
                 ),
                 AlbumItem(
+                    id = "back-in-black",
                     name = "Back in Black",
                     artist = "AC/DC",
                     tag = "AC",
@@ -374,18 +478,21 @@ private fun sampleAlbumSections(): List<AlbumSection> {
             title = "Hip Hop",
             albums = listOf(
                 AlbumItem(
+                    id = "damn",
                     name = "DAMN.",
                     artist = "Kendrick Lamar",
                     tag = "KL",
                     colors = listOf(Color(0xFF743B3B), Color(0xFFF2D2BF))
                 ),
                 AlbumItem(
+                    id = "astroworld",
                     name = "Astroworld",
                     artist = "Travis Scott",
                     tag = "TS",
                     colors = listOf(Color(0xFF8B5A2B), Color(0xFF21215B))
                 ),
                 AlbumItem(
+                    id = "eminem-show",
                     name = "The Eminem Show",
                     artist = "Eminem",
                     tag = "EM",
@@ -396,24 +503,29 @@ private fun sampleAlbumSections(): List<AlbumSection> {
 }
 
 
+
+
 private fun sampleArtistSections(): List<AlbumSection> {
     return listOf(
         AlbumSection(
             title = "Popular",
             albums = listOf(
                 AlbumItem(
+                    id = "artist-bad-bunny",
                     name = "Bad Bunny",
                     artist = "74,4.775.730 ouvintes mensais",
                     tag = "BB",
                     colors = listOf(Color(0xFF2DBB4D), Color(0xFF064B12))
                 ),
                 AlbumItem(
+                    id = "artist-sabrina",
                     name = "Sabrina Carpenter",
                     artist = "84.101.805 ouvintes mensais",
                     tag = "SC",
                     colors = listOf(Color(0xFFD39AA0), Color(0xFF7F4C53))
                 ),
                 AlbumItem(
+                    id = "artist-weeknd",
                     name = "The Weeknd",
                     artist = "111.642.112 ouvintes mensais",
                     tag = "TW",
@@ -425,18 +537,21 @@ private fun sampleArtistSections(): List<AlbumSection> {
             title = "Velha Guarda",
             albums = listOf(
                 AlbumItem(
+                    id = "artist-mj",
                     name = "Michael Jackson",
                     artist = "62.136.109 ouvintes mensais",
                     tag = "MJ",
                     colors = listOf(Color(0xFFF0F0F0), Color(0xFF8C8C8C))
                 ),
                 AlbumItem(
+                    id = "artist-seu-jorge",
                     name = "Seu Jorge",
                     artist = "6.186.869 ouvintes mensais",
                     tag = "SJ",
                     colors = listOf(Color(0xFF2B2B2B), Color(0xFF6E4F42))
                 ),
                 AlbumItem(
+                    id = "artist-tim-maia",
                     name = "Tim Maia",
                     artist = "5.220.441 ouvintes mensais",
                     tag = "TM",
@@ -447,10 +562,12 @@ private fun sampleArtistSections(): List<AlbumSection> {
     )
 }
 
+
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun MusicLibraryPreview() {
     ResonanceTheme {
-        MusicLibraryScreen()
+        MusicLibraryScreen(onAlbumOpen = {}, onArtistOpen = {}, onUserIconClick = {})
     }
 }
+

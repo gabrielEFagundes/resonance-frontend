@@ -2,6 +2,7 @@ package com.music.resonance
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -16,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -44,9 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.music.resonance.ui.screens.AlbumDetailScreen
-import com.music.resonance.ui.screens.AlbumDetailUi
-import com.music.resonance.ui.screens.sampleAlbumDetailById
+import com.music.resonance.ui.screens.UserScreen
 import com.music.resonance.ui.theme.ResonanceTheme
 
 class MainActivity : ComponentActivity() {
@@ -54,23 +52,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             ResonanceTheme {
-                // A surface container using the 'background' color from the theme
                 Surface(
-                    modifier = Modifier.fillMaxSize().background(color = Color(0xFF1B1D22)).safeDrawingPadding(),
+                    modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
-                ){
-                    var openAlbumDetail by remember { mutableStateOf<AlbumDetailUi?>(null) }
-                    when (val detail = openAlbumDetail) {
-                        null -> MusicLibraryScreen(
-                            onAlbumOpen = { albumId ->
-                                openAlbumDetail = sampleAlbumDetailById(albumId)
-                            }
-                        )
-                        else -> AlbumDetailScreen(
-                            detail = detail,
-                            onBack = { openAlbumDetail = null }
-                        )
-                    }
+                ) {
+                    ResonanceApp()
                 }
             }
         }
@@ -78,9 +64,20 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+private fun ResonanceApp() {
+    var showProfile by remember { mutableStateOf(false) }
+    BackHandler(enabled = showProfile) { showProfile = false }
+    if (showProfile) {
+        UserScreen(onBack = { showProfile = false })
+    } else {
+        MusicLibraryScreen(onNavigateToProfile = { showProfile = true })
+    }
+}
+
+@Composable
 fun MusicLibraryScreen(
-    onAlbumOpen: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNavigateToProfile: () -> Unit = {}
 ) {
     val albumSections = remember { sampleAlbumSections() }
     val artistSections = remember { sampleArtistSections() }
@@ -91,14 +88,16 @@ fun MusicLibraryScreen(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFFE6E6E6))
+            .padding(horizontal = 18.dp, vertical = 28.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .clip(RoundedCornerShape(22.dp))
                 .background(Color(0xFF1B1D22))
                 .padding(top = 20.dp)
         ) {
-            HeaderSection()
+            HeaderSection(onUserIconClick = onNavigateToProfile)
             Spacer(modifier = Modifier.height(14.dp))
             SearchBar()
             Spacer(modifier = Modifier.height(14.dp))
@@ -107,16 +106,13 @@ fun MusicLibraryScreen(
                 onSelected = { selectedFilter = it }
             )
             Spacer(modifier = Modifier.height(10.dp))
-            LibrarySections(
-                sections = currentSections,
-                onAlbumOpen = if (selectedFilter == "Álbuns") onAlbumOpen else null
-            )
+            LibrarySections(sections = currentSections)
         }
     }
 }
 
 @Composable
-private fun HeaderSection() {
+private fun HeaderSection(onUserIconClick: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -158,7 +154,8 @@ private fun HeaderSection() {
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(Color(0xFF3A3D44)),
+                .background(Color(0xFF3A3D44))
+                .clickable { onUserIconClick() },
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -245,10 +242,7 @@ private fun FilterPill(
 }
 
 @Composable
-private fun LibrarySections(
-    sections: List<AlbumSection>,
-    onAlbumOpen: ((String) -> Unit)?
-) {
+private fun LibrarySections(sections: List<AlbumSection>) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 18.dp),
@@ -269,10 +263,7 @@ private fun LibrarySections(
                     contentPadding = PaddingValues(horizontal = 18.dp)
                 ) {
                     items(section.albums) { album ->
-                        AlbumCard(
-                            album = album,
-                            onClick = onAlbumOpen?.let { open -> { open(album.id) } }
-                        )
+                        AlbumCard(album = album)
                     }
                 }
             }
@@ -281,14 +272,8 @@ private fun LibrarySections(
 }
 
 @Composable
-private fun AlbumCard(
-    album: AlbumItem,
-    onClick: (() -> Unit)?
-) {
-    val columnModifier = Modifier
-        .width(140.dp)
-        .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
-    Column(modifier = columnModifier) {
+private fun AlbumCard(album: AlbumItem) {
+    Column(modifier = Modifier.width(140.dp)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -331,7 +316,6 @@ private data class AlbumSection(
 )
 
 private data class AlbumItem(
-    val id: String,
     val name: String,
     val artist: String,
     val tag: String,
@@ -344,21 +328,18 @@ private fun sampleAlbumSections(): List<AlbumSection> {
             title = "Popular",
             albums = listOf(
                 AlbumItem(
-                    id = "debi-tirar-mas-fotos",
                     name = "DeBi TIRAR MÁS FOTOs",
                     artist = "Bad Bunny",
                     tag = "BAD",
                     colors = listOf(Color(0xFF285439), Color(0xFF8BAE84))
                 ),
                 AlbumItem(
-                    id = "significant-other",
                     name = "Significant Other",
                     artist = "Limp Bizkit",
                     tag = "LB",
                     colors = listOf(Color(0xFF54317A), Color(0xFFE0715D))
                 ),
                 AlbumItem(
-                    id = "random-access-memories",
                     name = "Random Access Memories",
                     artist = "Daft Punk",
                     tag = "DP",
@@ -370,21 +351,18 @@ private fun sampleAlbumSections(): List<AlbumSection> {
             title = "Rock & Roll",
             albums = listOf(
                 AlbumItem(
-                    id = "dr-feelgood",
                     name = "Dr. Feelgood",
                     artist = "Motley Crue",
                     tag = "MC",
                     colors = listOf(Color(0xFF446D63), Color(0xFFC95E57))
                 ),
                 AlbumItem(
-                    id = "paranoid",
                     name = "Paranoid",
                     artist = "Black Sabbath",
                     tag = "BS",
                     colors = listOf(Color(0xFF19171D), Color(0xFFA53C27))
                 ),
                 AlbumItem(
-                    id = "back-in-black",
                     name = "Back in Black",
                     artist = "AC/DC",
                     tag = "AC",
@@ -396,21 +374,18 @@ private fun sampleAlbumSections(): List<AlbumSection> {
             title = "Hip Hop",
             albums = listOf(
                 AlbumItem(
-                    id = "damn",
                     name = "DAMN.",
                     artist = "Kendrick Lamar",
                     tag = "KL",
                     colors = listOf(Color(0xFF743B3B), Color(0xFFF2D2BF))
                 ),
                 AlbumItem(
-                    id = "astroworld",
                     name = "Astroworld",
                     artist = "Travis Scott",
                     tag = "TS",
                     colors = listOf(Color(0xFF8B5A2B), Color(0xFF21215B))
                 ),
                 AlbumItem(
-                    id = "eminem-show",
                     name = "The Eminem Show",
                     artist = "Eminem",
                     tag = "EM",
@@ -427,21 +402,18 @@ private fun sampleArtistSections(): List<AlbumSection> {
             title = "Popular",
             albums = listOf(
                 AlbumItem(
-                    id = "artist-bad-bunny",
                     name = "Bad Bunny",
                     artist = "74,4.775.730 ouvintes mensais",
                     tag = "BB",
                     colors = listOf(Color(0xFF2DBB4D), Color(0xFF064B12))
                 ),
                 AlbumItem(
-                    id = "artist-sabrina",
                     name = "Sabrina Carpenter",
                     artist = "84.101.805 ouvintes mensais",
                     tag = "SC",
                     colors = listOf(Color(0xFFD39AA0), Color(0xFF7F4C53))
                 ),
                 AlbumItem(
-                    id = "artist-weeknd",
                     name = "The Weeknd",
                     artist = "111.642.112 ouvintes mensais",
                     tag = "TW",
@@ -453,21 +425,18 @@ private fun sampleArtistSections(): List<AlbumSection> {
             title = "Velha Guarda",
             albums = listOf(
                 AlbumItem(
-                    id = "artist-mj",
                     name = "Michael Jackson",
                     artist = "62.136.109 ouvintes mensais",
                     tag = "MJ",
                     colors = listOf(Color(0xFFF0F0F0), Color(0xFF8C8C8C))
                 ),
                 AlbumItem(
-                    id = "artist-seu-jorge",
                     name = "Seu Jorge",
                     artist = "6.186.869 ouvintes mensais",
                     tag = "SJ",
                     colors = listOf(Color(0xFF2B2B2B), Color(0xFF6E4F42))
                 ),
                 AlbumItem(
-                    id = "artist-tim-maia",
                     name = "Tim Maia",
                     artist = "5.220.441 ouvintes mensais",
                     tag = "TM",
@@ -482,6 +451,6 @@ private fun sampleArtistSections(): List<AlbumSection> {
 @Composable
 fun MusicLibraryPreview() {
     ResonanceTheme {
-        MusicLibraryScreen(onAlbumOpen = {})
+        MusicLibraryScreen()
     }
 }

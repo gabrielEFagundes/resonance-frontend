@@ -1,5 +1,6 @@
 package com.music.resonance.ui.screens
 
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,16 +34,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.music.resonance.ui.theme.ResonanceTheme
 
-private data class MusicTrackUi(
+
+data class MusicTrackUi(
     val number: Int,
     val title: String,
     val duration: String
 )
 
-private data class MusicSectionUi(
+
+data class MusicSectionUi(
     val title: String,
     val tracks: List<MusicTrackUi>
 )
+
 
 @Composable
 fun MusicScreen(
@@ -50,91 +54,9 @@ fun MusicScreen(
     onUserIconClick: () -> Unit,
     onAlbumsClick: () -> Unit,
     onArtistsClick: () -> Unit,
+    sections: List<MusicSectionUi>,
     modifier: Modifier = Modifier
 ) {
-    val sections = listOf(
-        MusicSectionUi(
-            title = "Popular",
-            tracks = listOf(
-                MusicTrackUi(1, "NUEVAYol", "3:03"),
-                MusicTrackUi(2, "VOY A LLeVARTE PA PR", "2:36"),
-                MusicTrackUi(3, "BAILE INoLVIDABLE", "2:36"),
-                MusicTrackUi(4, "PERFuMITO NUEVO", "3:07"),
-                MusicTrackUi(5, "WELTiTA", "3:55")
-            )
-        ),
-        MusicSectionUi(
-            title = "Rock & Roll",
-            tracks = listOf(
-                MusicTrackUi(1, "Bohemian Rhapsody", "5:55"),
-                MusicTrackUi(2, "Stairway to Heaven", "8:02"),
-                MusicTrackUi(3, "Paint it, Black", "3:45"),
-                MusicTrackUi(4, "Code Together", "4:20"),
-                MusicTrackUi(5, "Smells Like Teen Spirit", "5:01")
-            )
-        ),
-        MusicSectionUi(
-            title = "POP",
-            tracks = listOf(
-                MusicTrackUi(1, "Billie Jean", "4:54"),
-                MusicTrackUi(2, "Like a Prayer", "5:39"),
-                MusicTrackUi(3, "Thank U, Next", "3:27"),
-                MusicTrackUi(4, "Shake it Off", "3:39"),
-                MusicTrackUi(5, "Firework", "3:48")
-            )
-        ),
-        MusicSectionUi(
-            title = "Funk",
-            tracks = listOf(
-                MusicTrackUi(1, "Get Up", "5:17"),
-                MusicTrackUi(2, "Kiss", "3:46"),
-                MusicTrackUi(3, "Le Freak", "5:28"),
-                MusicTrackUi(4, "September", "3:35"),
-                MusicTrackUi(5, "Thank You", "4:45")
-            )
-        ),
-        MusicSectionUi(
-            title = "Rap",
-            tracks = listOf(
-                MusicTrackUi(1, "Changes", "4:29"),
-                MusicTrackUi(2, "Juicy", "5:02"),
-                MusicTrackUi(3, "Lose Yourself", "5:26"),
-                MusicTrackUi(4,"HUMBLE", "2:57"),
-                MusicTrackUi(5, "N.Y State of Mind", "4:54")
-            )
-        ),
-        MusicSectionUi(
-            title = "Death Metal",
-            tracks = listOf(
-                MusicTrackUi(1, "Hammer Smashed Face", "3:42"),
-                MusicTrackUi(2, "Raining Blood", "4:14"),
-                MusicTrackUi(3, "Crystal Mountain", "5:30"),
-                MusicTrackUi(4, "Left Hand Path", "6:46"),
-                MusicTrackUi(5, "Drowned in a Glass of Wine", "4:12")
-            )
-        ),
-        MusicSectionUi(
-            title = "Classic Jazz",
-            tracks = listOf(
-                MusicTrackUi(1, "Take Five", "5:24"),
-                MusicTrackUi(2, "So What", "9:22"),
-                MusicTrackUi(3, "My Favorite Things", "13:41"),
-                MusicTrackUi(4, "Round Midnight", "5:58"),
-                MusicTrackUi(5, "All Blues", "11:33")
-            )
-        ),
-        MusicSectionUi(
-            title = "Nu Metal",
-            tracks = listOf(
-                MusicTrackUi(1, "Freak on a Leash", "4:15"),
-                MusicTrackUi(2, "Numb", "3:07"),
-                MusicTrackUi(3, "Down with the Sickness", "4:38"),
-                MusicTrackUi(4, "Blind", "4:11"),
-                MusicTrackUi(5, "Break Stuff", "2:46")
-            )
-        )
-    )
-
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -170,6 +92,7 @@ fun MusicScreen(
         }
     }
 }
+
 
 @Composable
 private fun MusicHeader(
@@ -232,6 +155,7 @@ private fun MusicHeader(
     }
 }
 
+
 @Composable
 private fun MusicSearchBar() {
     Row(
@@ -256,6 +180,7 @@ private fun MusicSearchBar() {
         )
     }
 }
+
 
 @Composable
 private fun MusicFilterRow(
@@ -288,6 +213,7 @@ private fun MusicFilterRow(
     }
 }
 
+
 @Composable
 private fun MusicFilterPill(
     title: String,
@@ -310,6 +236,7 @@ private fun MusicFilterPill(
         )
     }
 }
+
 
 @Composable
 private fun MusicSection(section: MusicSectionUi) {
@@ -361,6 +288,7 @@ private fun MusicSection(section: MusicSectionUi) {
     }
 }
 
+
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 private fun MusicScreenPreview() {
@@ -369,7 +297,17 @@ private fun MusicScreenPreview() {
             onBack = {},
             onUserIconClick = {},
             onAlbumsClick = {},
-            onArtistsClick = {}
+            onArtistsClick = {},
+            sections = listOf(
+                MusicSectionUi(
+                    title = "Popular",
+                    tracks = listOf(
+                        MusicTrackUi(1, "NUEVAYol", "3:03"),
+                        MusicTrackUi(2, "VOY A LLeVARTE PA PR", "2:36"),
+                        MusicTrackUi(3, "BAILE INoLVIDABLE", "2:36")
+                    )
+                )
+            )
         )
     }
 }

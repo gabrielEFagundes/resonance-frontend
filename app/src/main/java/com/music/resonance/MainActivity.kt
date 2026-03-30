@@ -1,6 +1,8 @@
 package com.music.resonance
 
 
+
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -30,11 +32,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,22 +50,55 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.music.resonance.data.ResonanceApi
 import com.music.resonance.ui.screens.AlbumScreen
+import com.music.resonance.ui.screens.AlbumTrackUi
+import com.music.resonance.ui.screens.AlbumDetailUi
 import com.music.resonance.ui.screens.ArtistScreen
+import com.music.resonance.ui.screens.ArtistAlbumTileUi
+import com.music.resonance.ui.screens.ArtistProfileUi
 import com.music.resonance.ui.screens.MusicScreen
+import com.music.resonance.ui.screens.MusicSectionUi
+import com.music.resonance.ui.screens.MusicTrackUi
+import com.music.resonance.ui.screens.PlaylistScreen
+import com.music.resonance.ui.screens.PlaylistUi
 import com.music.resonance.ui.screens.UserScreen
 import com.music.resonance.ui.screens.sampleAlbumDetailById
 import com.music.resonance.ui.screens.sampleArtistProfileById
 import com.music.resonance.ui.theme.ResonanceTheme
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlin.math.absoluteValue
+
+
 
 
 private sealed class ResonanceRoute {
     data object Library : ResonanceRoute()
     data object User : ResonanceRoute()
     data object Music : ResonanceRoute()
+    data object Playlist : ResonanceRoute()
     data class Artist(val artistId: String) : ResonanceRoute()
     data class Album(val albumId: String, val popToArtistId: String?) : ResonanceRoute()
 }
+
+
+private data class LibraryRemoteState(
+    val albumSections: List<AlbumSection>,
+    val artistSections: List<AlbumSection>,
+    val artistProfilesById: Map<String, ArtistProfileUi>,
+    val albumDetailsById: Map<String, AlbumDetailUi>,
+    val musicSections: List<MusicSectionUi>,
+    val playlists: List<PlaylistUi>,
+    val userName: String,
+    val registrationLabel: String,
+    val postedPlaylists: List<String>,
+    val postedAlbums: List<String>,
+    val errorMessage: String? = null
+)
+
+
 
 
 class MainActivity : ComponentActivity() {
@@ -74,6 +111,41 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize().background(color = Color(0xFF1B1D22)).safeDrawingPadding(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    val remoteState by produceState<LibraryRemoteState?>(
+                        initialValue = null
+                    ) {
+                        value = try {
+                            loadLibraryRemoteState()
+                        } catch (e: Exception) {
+                            LibraryRemoteState(
+                                albumSections = sampleAlbumSections(),
+                                artistSections = sampleArtistSections(),
+                                artistProfilesById = emptyMap(),
+                                albumDetailsById = emptyMap(),
+                                musicSections = sampleMusicSections(),
+                                playlists = emptyList(),
+                                userName = "Usuario",
+                                registrationLabel = "Inscricao indisponivel",
+                                postedPlaylists = emptyList(),
+                                postedAlbums = emptyList(),
+                                errorMessage = e.message ?: "Falha ao carregar API."
+                            )
+                        }
+                    }
+
+
+                    if (remoteState == null) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = Color(0xFF23A7A2))
+                        }
+                        return@Surface
+                    }
+
+
+                    val state = remoteState!!
                     var route by remember { mutableStateOf<ResonanceRoute>(ResonanceRoute.Library) }
                     var librarySelectedFilter by remember { mutableStateOf("Álbuns") }
                     BackHandler(enabled = route != ResonanceRoute.Library) {
@@ -81,6 +153,7 @@ class MainActivity : ComponentActivity() {
                             ResonanceRoute.Library -> ResonanceRoute.Library
                             ResonanceRoute.User -> ResonanceRoute.Library
                             ResonanceRoute.Music -> ResonanceRoute.Library
+                            ResonanceRoute.Playlist -> ResonanceRoute.User
                             is ResonanceRoute.Artist -> ResonanceRoute.Library
                             is ResonanceRoute.Album -> r.popToArtistId?.let { ResonanceRoute.Artist(it) }
                                 ?: ResonanceRoute.Library
@@ -88,15 +161,17 @@ class MainActivity : ComponentActivity() {
                     }
                     when (val r = route) {
                         ResonanceRoute.Library -> MusicLibraryScreen(
+                            albumSections = state.albumSections,
+                            artistSections = state.artistSections,
                             selectedFilter = librarySelectedFilter,
                             onSelectedFilterChange = { librarySelectedFilter = it },
                             onAlbumOpen = { albumId ->
-                                if (sampleAlbumDetailById(albumId) != null) {
+                                if (state.albumDetailsById[albumId] != null || sampleAlbumDetailById(albumId) != null) {
                                     route = ResonanceRoute.Album(albumId, popToArtistId = null)
                                 }
                             },
                             onArtistOpen = { artistId ->
-                                if (sampleArtistProfileById(artistId) != null) {
+                                if (state.artistProfilesById[artistId] != null || sampleArtistProfileById(artistId) != null) {
                                     route = ResonanceRoute.Artist(artistId)
                                 }
                             },
@@ -108,7 +183,12 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                         ResonanceRoute.User -> UserScreen(
-                            onBack = { route = ResonanceRoute.Library }
+                            onBack = { route = ResonanceRoute.Library },
+                            onOpenPlaylists = { route = ResonanceRoute.Playlist },
+                            userName = state.userName,
+                            registrationLabel = state.registrationLabel,
+                            postedPlaylists = state.postedPlaylists,
+                            postedAlbums = state.postedAlbums
                         )
                         ResonanceRoute.Music -> MusicScreen(
                             onBack = { route = ResonanceRoute.Library },
@@ -120,16 +200,22 @@ class MainActivity : ComponentActivity() {
                             onArtistsClick = {
                                 librarySelectedFilter = "Artistas"
                                 route = ResonanceRoute.Library
-                            }
+                            },
+                            sections = state.musicSections
+                        )
+                        ResonanceRoute.Playlist -> PlaylistScreen(
+                            playlists = state.playlists,
+                            onBack = { route = ResonanceRoute.User }
                         )
                         is ResonanceRoute.Artist -> {
-                            val profile = sampleArtistProfileById(r.artistId)
+                            val profile = state.artistProfilesById[r.artistId]
+                                ?: sampleArtistProfileById(r.artistId)
                             if (profile != null) {
                                 ArtistScreen(
                                     profile = profile,
                                     onBack = { route = ResonanceRoute.Library },
                                     onAlbumOpen = { albumId ->
-                                        if (sampleAlbumDetailById(albumId) != null) {
+                                        if (state.albumDetailsById[albumId] != null || sampleAlbumDetailById(albumId) != null) {
                                             route = ResonanceRoute.Album(
                                                 albumId,
                                                 popToArtistId = r.artistId
@@ -142,7 +228,8 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         is ResonanceRoute.Album -> {
-                            val detail = sampleAlbumDetailById(r.albumId)
+                            val detail = state.albumDetailsById[r.albumId]
+                                ?: sampleAlbumDetailById(r.albumId)
                             if (detail != null) {
                                 AlbumScreen(
                                     detail = detail,
@@ -156,6 +243,17 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+
+
+                    state.errorMessage?.let { error ->
+                        Text(
+                            text = "API indisponivel: mostrando dados locais ($error)",
+                            color = Color(0xFFFFB4AB),
+                            fontSize = 12.sp,
+                            modifier = Modifier
+                                .padding(10.dp)
+                        )
+                    }
                 }
             }
         }
@@ -163,8 +261,12 @@ class MainActivity : ComponentActivity() {
 }
 
 
+
+
 @Composable
-fun MusicLibraryScreen(
+private fun MusicLibraryScreen(
+    albumSections: List<AlbumSection>,
+    artistSections: List<AlbumSection>,
     selectedFilter: String,
     onSelectedFilterChange: (String) -> Unit,
     onAlbumOpen: (String) -> Unit,
@@ -173,9 +275,9 @@ fun MusicLibraryScreen(
     onMusicOpen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val albumSections = remember { sampleAlbumSections() }
-    val artistSections = remember { sampleArtistSections() }
     val currentSections = if (selectedFilter == "Álbuns") albumSections else artistSections
+
+
 
 
     Box(
@@ -207,6 +309,231 @@ fun MusicLibraryScreen(
         }
     }
 }
+
+
+private suspend fun loadLibraryRemoteState(): LibraryRemoteState {
+    val artists = runCatching { ResonanceApi.service.getArtists() }.getOrElse { emptyList() }
+    val albums = runCatching { ResonanceApi.service.getAlbums() }.getOrElse { emptyList() }
+    val musics = runCatching { ResonanceApi.service.getMusics() }.getOrElse { emptyList() }
+    val playlists = runCatching { ResonanceApi.service.getPlaylists() }.getOrElse { emptyList() }
+    val users = runCatching { ResonanceApi.service.getUsers() }.getOrElse { emptyList() }
+
+
+    val artistsById = artists.mapNotNull { artist ->
+        artist.id?.let { it to artist }
+    }.toMap()
+    val albumDetails = coroutineScope {
+        albums.mapNotNull { summary ->
+            val albumId = summary.id ?: return@mapNotNull null
+            async {
+                runCatching {
+                    val detail = ResonanceApi.service.getAlbumById(albumId)
+                    val detailId = detail.id ?: albumId
+                    detailId.toString() to detail.toAlbumDetailUi(artistsById[detail.artistId])
+                }.getOrNull()
+            }
+        }.awaitAll().filterNotNull().toMap()
+    }
+
+
+    val albumSections = listOf(
+        AlbumSection(
+            title = "API - Álbuns",
+            albums = albums.mapNotNull { album ->
+                if (album.id == null) null else album.toAlbumItem(artistsById[album.artistId])
+            }
+        )
+    )
+
+
+    val artistSections = listOf(
+        AlbumSection(
+            title = "API - Artistas",
+            albums = artists.mapNotNull { artist ->
+                val artistId = artist.id ?: return@mapNotNull null
+                AlbumItem(
+                    id = artistId.toString(),
+                    name = artist.displayName(),
+                    artist = artist.monthlyListeners?.let { "$it ouvintes mensais" }
+                        ?: "Artista",
+                    tag = artist.displayName().split(" ").mapNotNull { it.firstOrNull()?.toString() }
+                        .take(2).joinToString(""),
+                    colors = colorsForSeed(artistId.toString())
+                )
+            }
+        )
+    )
+
+
+    val artistProfiles = artists.mapNotNull artistLoop@ { artist ->
+        val artistId = artist.id ?: return@artistLoop null
+        val relatedAlbums = albums.filter { it.artistId == artistId }
+        artistId.toString() to ArtistProfileUi(
+            id = artistId.toString(),
+            name = artist.displayName(),
+            listenersLine = artist.monthlyListeners?.let { "$it ouvintes mensais" }
+                ?: "Sem ouvintes mensais",
+            bioIntro = artist.description ?: "Sem descricao",
+            bioExtra = "",
+            heroGradientStart = colorLongA(artistId.toString()),
+            heroGradientEnd = colorLongB(artistId.toString()),
+            albums = relatedAlbums.mapNotNull albumLoop@ { album ->
+                val albumId = album.id ?: return@albumLoop null
+                ArtistAlbumTileUi(
+                    albumId = albumId.toString(),
+                    displayTitle = album.title ?: "Album sem titulo",
+                    coverGradientStart = colorLongA(albumId.toString()),
+                    coverGradientEnd = colorLongB(albumId.toString())
+                )
+            }
+        )
+    }.toMap()
+
+
+    val musicsByGenre = musics.groupBy { it.genre?.ifBlank { null } ?: "Outros" }
+    val musicSections = musicsByGenre.entries.map { (genre, list) ->
+        MusicSectionUi(
+            title = genre,
+            tracks = list.mapIndexed { idx, music ->
+                MusicTrackUi(
+                    number = idx + 1,
+                    title = music.title ?: "Faixa sem titulo",
+                    duration = formatDuration(music.duration)
+                )
+            }
+        )
+    }.ifEmpty { sampleMusicSections() }
+
+
+    val usersById = users.mapNotNull { user ->
+        user.id?.let { it to user }
+    }.toMap()
+    val playlistUis = playlists.mapNotNull { playlist ->
+        val playlistId = playlist.id ?: return@mapNotNull null
+        PlaylistUi(
+            id = playlistId.toString(),
+            title = playlist.title ?: "Playlist sem titulo",
+            trackCount = playlist.musics?.size ?: 0,
+            owner = usersById[playlist.userId]?.name ?: "Usuario #${playlist.userId ?: "?"}"
+        )
+    }
+
+
+    val firstUser = users.firstOrNull()
+    val userName = firstUser?.name ?: "Usuario"
+    val registrationLabel = "Login: ${firstUser?.loginDate ?: "N/A"}"
+    val postedPlaylists = playlistUis.filter { p ->
+        firstUser?.id == null || usersById[firstUser.id]?.name == p.owner
+    }.map { it.title }.ifEmpty { playlistUis.map { it.title } }
+    val postedAlbums = albums.take(8).map { it.title ?: "Album sem titulo" }
+
+
+    return LibraryRemoteState(
+        albumSections = albumSections,
+        artistSections = artistSections,
+        artistProfilesById = artistProfiles,
+        albumDetailsById = albumDetails,
+        musicSections = musicSections,
+        playlists = playlistUis,
+        userName = userName,
+        registrationLabel = registrationLabel,
+        postedPlaylists = postedPlaylists,
+        postedAlbums = postedAlbums
+    )
+}
+
+
+private fun com.music.resonance.data.ArtistResponseDto.displayName(): String {
+    return artisticName?.takeIf { it.isNotBlank() }
+        ?: name?.takeIf { it.isNotBlank() }
+        ?: "Artista #${id ?: "?"}"
+}
+
+
+private fun com.music.resonance.data.AlbumSummaryDto.toAlbumItem(
+    artist: com.music.resonance.data.ArtistResponseDto?
+): AlbumItem {
+    val albumId = id ?: 0L
+    return AlbumItem(
+        id = albumId.toString(),
+        name = title ?: "Album sem titulo",
+        artist = artist?.displayName() ?: "Artista #${artistId ?: "?"}",
+        tag = (title ?: "AL").take(2).uppercase(),
+        colors = colorsForSeed(albumId.toString())
+    )
+}
+
+
+private fun com.music.resonance.data.AlbumDetailDto.toAlbumDetailUi(
+    artist: com.music.resonance.data.ArtistResponseDto?
+): AlbumDetailUi {
+    val tracks = (musics ?: emptyList()).mapIndexed { idx, music ->
+        AlbumTrackUi(
+            number = idx + 1,
+            title = music.title ?: "Faixa ${idx + 1}",
+            duration = formatDuration(music.duration)
+        )
+    }
+
+
+    val albumId = id ?: 0L
+    return AlbumDetailUi(
+        id = albumId.toString(),
+        title = title ?: "Album sem titulo",
+        artist = artist?.displayName() ?: "Artista #${artistId ?: "?"}",
+        year = releaseYear ?: 0,
+        coverGradientStart = colorLongA(albumId.toString()),
+        coverGradientEnd = colorLongB(albumId.toString()),
+        tracks = tracks
+    )
+}
+
+
+private fun formatDuration(durationSeconds: Int?): String {
+    val total = durationSeconds ?: return "--:--"
+    val min = total / 60
+    val sec = total % 60
+    return "%d:%02d".format(min, sec)
+}
+
+
+private fun sampleMusicSections(): List<MusicSectionUi> {
+    return listOf(
+        MusicSectionUi(
+            title = "Popular",
+            tracks = listOf(
+                MusicTrackUi(1, "NUEVAYol", "3:03"),
+                MusicTrackUi(2, "VOY A LLeVARTE PA PR", "2:36"),
+                MusicTrackUi(3, "BAILE INoLVIDABLE", "2:36")
+            )
+        )
+    )
+}
+
+
+private fun colorsForSeed(seed: String): List<Color> {
+    return listOf(Color(colorLongA(seed)), Color(colorLongB(seed)))
+}
+
+
+private fun colorLongA(seed: String): Long {
+    val hash = seed.hashCode().absoluteValue
+    val r = 60 + (hash % 120)
+    val g = 50 + ((hash / 7) % 120)
+    val b = 70 + ((hash / 11) % 120)
+    return (0xFF000000L or (r.toLong() shl 16) or (g.toLong() shl 8) or b.toLong())
+}
+
+
+private fun colorLongB(seed: String): Long {
+    val hash = (seed.hashCode() * 31).absoluteValue
+    val r = 120 + (hash % 100)
+    val g = 90 + ((hash / 5) % 100)
+    val b = 110 + ((hash / 9) % 100)
+    return (0xFF000000L or (r.toLong() shl 16) or (g.toLong() shl 8) or b.toLong())
+}
+
+
 
 
 @Composable
@@ -267,6 +594,8 @@ private fun HeaderSection(onUserIconClick: () -> Unit) {
 }
 
 
+
+
 @Composable
 private fun SearchBar() {
     Row(
@@ -291,6 +620,8 @@ private fun SearchBar() {
         )
     }
 }
+
+
 
 
 @Composable
@@ -326,6 +657,8 @@ private fun FilterToggle(
 }
 
 
+
+
 @Composable
 private fun FilterPill(
     title: String,
@@ -348,6 +681,8 @@ private fun FilterPill(
         )
     }
 }
+
+
 
 
 @Composable
@@ -388,6 +723,8 @@ private fun LibrarySections(
         }
     }
 }
+
+
 
 
 @Composable
@@ -436,10 +773,14 @@ private fun AlbumCard(
 }
 
 
+
+
 private data class AlbumSection(
     val title: String,
     val albums: List<AlbumItem>
 )
+
+
 
 
 private data class AlbumItem(
@@ -449,6 +790,8 @@ private data class AlbumItem(
     val tag: String,
     val colors: List<Color>
 )
+
+
 
 
 private fun sampleAlbumSections(): List<AlbumSection> {
@@ -536,6 +879,10 @@ private fun sampleAlbumSections(): List<AlbumSection> {
 
 
 
+
+
+
+
 private fun sampleArtistSections(): List<AlbumSection> {
     return listOf(
         AlbumSection(
@@ -594,11 +941,15 @@ private fun sampleArtistSections(): List<AlbumSection> {
 }
 
 
+
+
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun MusicLibraryPreview() {
     ResonanceTheme {
         MusicLibraryScreen(
+            albumSections = sampleAlbumSections(),
+            artistSections = sampleArtistSections(),
             selectedFilter = "Álbuns",
             onSelectedFilterChange = {},
             onAlbumOpen = {},

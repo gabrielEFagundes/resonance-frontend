@@ -1,5 +1,6 @@
 package com.music.resonance.ui.screens
 
+
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -45,27 +46,34 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 
+
 private val ScreenBackground = Color(0xFF1E1E1E)
 private val TealButton = Color(0xFF26A69A)
 private val ProfileBorderBlue = Color(0xFF2196F3)
 private val CardWhite = Color.White
 private val CardIconBlack = Color(0xFF0B0B0B)
 
+
 @Composable
 fun UserScreen(
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
+    onOpenPlaylists: () -> Unit = {},
     remoteProfileImageUrl: String? = null,
     onProfileImageUriChanged: (String) -> Unit = {},
     userName: String = "Gabriel Ehrat Fagundes",
     birthDateLabel: String = "Data de nascimento: 08/03/2008",
-    registrationLabel: String = "Inscrição: 18/03/2026"
+    registrationLabel: String = "Inscrição: 18/03/2026",
+    postedPlaylists: List<String> = listOf("Playlist 1", "Playlist 2", "Playlist 3"),
+    postedAlbums: List<String> = listOf("Álbum 1", "Álbum 2", "Álbum 3")
 ) {
     // Modo local (mock). Em produção, isso viria da conta do usuário.
     var isArtistMode by remember { mutableStateOf(false) }
 
+
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     val onImageSavedStateUpdated = rememberUpdatedState(onProfileImageUriChanged)
+
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia(),
@@ -77,15 +85,18 @@ fun UserScreen(
         }
     )
 
+
     fun openGallery() {
         photoPickerLauncher.launch(
             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
         )
     }
 
+
     val profileModel: Any = selectedImageUri
         ?: remoteProfileImageUrl?.takeIf { it.isNotBlank() }
         ?: R.drawable.user_profile_photo
+
 
     Box(
         modifier = modifier
@@ -101,6 +112,7 @@ fun UserScreen(
         ) {
             Spacer(modifier = Modifier.height(120.dp))
 
+
             Box(modifier = Modifier.size(188.dp)) {
                 val imageModifier = Modifier
                     .align(Alignment.Center)
@@ -111,6 +123,7 @@ fun UserScreen(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) { openGallery() }
+
 
                 Box(modifier = imageModifier) {
                     AsyncImage(
@@ -138,7 +151,9 @@ fun UserScreen(
                 }
             }
 
+
             Spacer(modifier = Modifier.height(28.dp))
+
 
             Text(
                 text = userName,
@@ -148,7 +163,9 @@ fun UserScreen(
                 textAlign = TextAlign.Center
             )
 
+
             Spacer(modifier = Modifier.height(14.dp))
+
 
             Text(
                 text = birthDateLabel,
@@ -157,7 +174,9 @@ fun UserScreen(
                 textAlign = TextAlign.Center
             )
 
+
             Spacer(modifier = Modifier.height(6.dp))
+
 
             Text(
                 text = registrationLabel,
@@ -166,7 +185,9 @@ fun UserScreen(
                 textAlign = TextAlign.Center
             )
 
+
             Spacer(modifier = Modifier.height(26.dp))
+
 
             TealButtonText(
                 text = if (isArtistMode) "Voltar para Usuário" else "Entrar em modo Artista",
@@ -174,20 +195,22 @@ fun UserScreen(
                 onClick = { isArtistMode = !isArtistMode }
             )
 
+
             Spacer(modifier = Modifier.height(16.dp))
+
 
             if (!isArtistMode) {
                 // UX do usuário: só playlists
                 TealButtonText(
                     text = "Postar Playlist",
                     modifier = Modifier.fillMaxWidth(),
-                    onClick = { /* TODO: abrir criação */ }
+                    onClick = onOpenPlaylists
                 )
                 Spacer(modifier = Modifier.height(18.dp))
                 SectionTitle(title = "Playlists postadas")
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalCards(
-                    items = listOf("Playlist 1", "Playlist 2", "Playlist 3"),
+                    items = postedPlaylists,
                     iconText = "♪"
                 )
             } else {
@@ -199,7 +222,7 @@ fun UserScreen(
                     TealButtonText(
                         text = "Postar Playlist",
                         modifier = Modifier.weight(1f),
-                        onClick = { /* TODO: abrir criação */ }
+                        onClick = onOpenPlaylists
                     )
                     TealButtonText(
                         text = "Postar Álbum",
@@ -208,23 +231,26 @@ fun UserScreen(
                     )
                 }
 
+
                 Spacer(modifier = Modifier.height(18.dp))
                 SectionTitle(title = "Álbuns postados")
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalCards(
-                    items = listOf("Álbum 1", "Álbum 2", "Álbum 3"),
+                    items = postedAlbums,
                     iconText = "♪"
                 )
+
 
                 Spacer(modifier = Modifier.height(18.dp))
                 SectionTitle(title = "Playlists postadas")
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalCards(
-                    items = listOf("Playlists 1", "Playlists 2", "Playlists 3"),
+                    items = postedPlaylists,
                     iconText = "♪"
                 )
             }
         }
+
 
         Box(
             modifier = Modifier
@@ -245,6 +271,7 @@ fun UserScreen(
     }
 }
 
+
 @Composable
 private fun SectionTitle(title: String) {
     Text(
@@ -256,6 +283,7 @@ private fun SectionTitle(title: String) {
         modifier = Modifier.fillMaxWidth()
     )
 }
+
 
 @Composable
 private fun TealButtonText(
@@ -279,6 +307,7 @@ private fun TealButtonText(
         )
     }
 }
+
 
 @Composable
 private fun HorizontalCards(
@@ -306,6 +335,7 @@ private fun HorizontalCards(
                 )
             }
 
+
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = title,
@@ -319,6 +349,7 @@ private fun HorizontalCards(
         }
     }
 }
+
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable

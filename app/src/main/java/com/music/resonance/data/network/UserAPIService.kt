@@ -33,7 +33,7 @@ interface UserAPIService{
 }
 
 object UserClient {
-    private const val BASE_URL = "http://10.0.2.2:8081/users/"
+    private const val BASE_URL = "https://resonance-api-bfax.onrender.com/users/"
 
     val apiService: UserAPIService by lazy{
         Retrofit.Builder()

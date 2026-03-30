@@ -7,5 +7,6 @@ class Music (
     val title: String,
     val artistId: Long,
     val duration: Int,
-    val genre: String
+    val genre: String,
+    val coverImageUrl: String
 )

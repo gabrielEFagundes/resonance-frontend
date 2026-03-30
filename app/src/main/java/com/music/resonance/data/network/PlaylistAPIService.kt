@@ -41,7 +41,7 @@ interface PlaylistAPIService{
 }
 
 object PlaylistClient{
-    private const val BASE_URL = "http://10.0.2.2:8081/playlists/"
+    private const val BASE_URL = "https://resonance-api-bfax.onrender.com/playlists/"
 
     val apiService: PlaylistAPIService by lazy{
         Retrofit.Builder()

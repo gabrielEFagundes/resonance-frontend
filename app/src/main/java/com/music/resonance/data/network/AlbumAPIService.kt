@@ -30,8 +30,6 @@ interface AlbumAPIService{
 
     @DELETE("{id}")
     suspend fun delAlbum(@Path("id") id: Long): Response<Unit>
-
-    // --
     @POST("{id}/musics/{musicId}")
     suspend fun addMusicToAlbum(@Path("id") idAlbum: Long, @Path("musicId") idMusic: Long): Response<Album>
 
@@ -40,7 +38,7 @@ interface AlbumAPIService{
 }
 
 object AlbumClient{
-    private const val BASE_URL = "http://10.0.2.2:8081/albums/"
+    private const val BASE_URL = "https://resonance-api-bfax.onrender.com/albums/"
 
     val apiService: AlbumAPIService by lazy{
         Retrofit.Builder()

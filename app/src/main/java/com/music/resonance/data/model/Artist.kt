@@ -6,11 +6,11 @@ data class Artist (
     override val id: Long,
     override val name: String,
     override val loginDate: String,
-    override val profilePictureUrl: String,
+    override val profilePictureUrl: String?,
 
-    val artisticName: String,
-    val monthlyListeners: Long,
-    val description:String
+    val artisticName: String?,
+    val monthlyListeners: Long?,
+    val description: String?
 
 ): User(
     id,

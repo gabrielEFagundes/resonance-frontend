@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +61,7 @@ fun UserScreen(
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
     onOpenPlaylists: () -> Unit = {},
+    onOpenAlbums: () -> Unit = {},
     remoteProfileImageUrl: String? = null,
     onProfileImageUriChanged: (String) -> Unit = {},
     userName: String = "Gabriel Ehrat Fagundes",
@@ -72,6 +75,7 @@ fun UserScreen(
 
 
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var profileUrlInput by remember { mutableStateOf(remoteProfileImageUrl ?: "") }
     val onImageSavedStateUpdated = rememberUpdatedState(onProfileImageUriChanged)
 
 
@@ -154,6 +158,34 @@ fun UserScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
+            OutlinedTextField(
+                value = profileUrlInput,
+                onValueChange = { profileUrlInput = it },
+                label = { Text("URL da foto de perfil") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = TealButton,
+                    unfocusedBorderColor = Color(0xFF656870),
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedLabelColor = TealButton,
+                    unfocusedLabelColor = Color(0xFFBEBEC0),
+                    cursorColor = TealButton
+                )
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            TealButtonText(
+                text = "Salvar URL da Foto",
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    if (profileUrlInput.isNotBlank()) {
+                        onProfileImageUriChanged(profileUrlInput.trim())
+                    }
+                }
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
 
             Text(
                 text = userName,
@@ -227,7 +259,7 @@ fun UserScreen(
                     TealButtonText(
                         text = "Postar Álbum",
                         modifier = Modifier.weight(1f),
-                        onClick = { /* TODO: abrir criação */ }
+                        onClick = onOpenAlbums
                     )
                 }
 

@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.music.resonance.ui.theme.ResonanceTheme
 
 
@@ -55,6 +56,7 @@ fun MusicScreen(
     onAlbumsClick: () -> Unit,
     onArtistsClick: () -> Unit,
     sections: List<MusicSectionUi>,
+    profileImageUrl: String? = null,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -70,7 +72,8 @@ fun MusicScreen(
         ) {
             MusicHeader(
                 onBack = onBack,
-                onUserIconClick = onUserIconClick
+                onUserIconClick = onUserIconClick,
+                profileImageUrl = profileImageUrl
             )
             Spacer(modifier = Modifier.height(14.dp))
             MusicSearchBar()
@@ -97,7 +100,8 @@ fun MusicScreen(
 @Composable
 private fun MusicHeader(
     onBack: () -> Unit,
-    onUserIconClick: () -> Unit
+    onUserIconClick: () -> Unit,
+    profileImageUrl: String?
 ) {
     Row(
         modifier = Modifier
@@ -145,12 +149,20 @@ private fun MusicHeader(
                 .clickable { onUserIconClick() },
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "ED",
-                color = Color.White,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 12.sp
-            )
+            if (profileImageUrl.isNullOrBlank()) {
+                Text(
+                    text = "ED",
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp
+                )
+            } else {
+                AsyncImage(
+                    model = profileImageUrl,
+                    contentDescription = "Foto de perfil",
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
     }
 }

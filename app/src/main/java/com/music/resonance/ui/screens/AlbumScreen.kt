@@ -3,6 +3,7 @@ package com.music.resonance.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,8 +22,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +41,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.music.resonance.ui.theme.ResonanceTheme
+import kotlinx.coroutines.launch
 
 
 data class AlbumTrackUi(
@@ -239,9 +248,19 @@ private fun defaultTracksFor(albumTitle: String): List<AlbumTrackUi> = listOf(
 @Composable
 fun AlbumDetailScreen(
     detail: AlbumDetailUi,
+    onUpdateAlbum: suspend (id: String, title: String, releaseYear: Int) -> Boolean,
+    onDeleteAlbum: suspend (id: String) -> Boolean,
+    onAddMusicToAlbum: suspend (title: String, durationSeconds: Int, genre: String) -> Boolean = { _, _, _ -> false },
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val scope = rememberCoroutineScope()
+    var editing by remember { mutableStateOf(false) }
+    var editTitle by remember(detail.id) { mutableStateOf(detail.title) }
+    var editYear by remember(detail.id) { mutableStateOf(detail.year.toString()) }
+    var newTrackTitle by remember(detail.id) { mutableStateOf("") }
+    var newDuration by remember(detail.id) { mutableStateOf("") }
+    var newGenre by remember(detail.id) { mutableStateOf("POP") }
     val coverStart = Color(detail.coverGradientStart.toInt())
     val coverEnd = Color(detail.coverGradientEnd.toInt())
 
@@ -309,6 +328,119 @@ fun AlbumDetailScreen(
                         fontSize = 14.sp,
                         modifier = Modifier.padding(horizontal = 24.dp)
                     )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    if (editing) {
+                        OutlinedTextField(
+                            value = editTitle,
+                            onValueChange = { editTitle = it },
+                            label = { Text("Título") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp),
+                            colors = formColors()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = editYear,
+                            onValueChange = { editYear = it.filter { ch -> ch.isDigit() }.take(4) },
+                            label = { Text("Ano") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp),
+                            colors = formColors()
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ActionChip(
+                            title = if (editing) "Salvar" else "Editar",
+                            onClick = {
+                                if (editing) {
+                                    scope.launch {
+                                        onUpdateAlbum(detail.id, editTitle, editYear.toIntOrNull() ?: detail.year)
+                                        editing = false
+                                    }
+                                } else {
+                                    editing = true
+                                }
+                            }
+                        )
+                        ActionChip(
+                            title = "Excluir",
+                            onClick = {
+                                scope.launch {
+                                    if (onDeleteAlbum(detail.id)) onBack()
+                                }
+                            }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Adicionar faixa ao album",
+                        color = Color(0xFFBEBEC0),
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newTrackTitle,
+                        onValueChange = { newTrackTitle = it },
+                        label = { Text("Titulo") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                        colors = formColors()
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = newDuration,
+                        onValueChange = { newDuration = it },
+                        label = { Text("Duracao (3:45 ou segundos)") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                        colors = formColors()
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = newGenre,
+                        onValueChange = { newGenre = it },
+                        label = { Text("Genero") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                        colors = formColors()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                            .height(40.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color(0xFF1E6768))
+                            .clickable(enabled = newTrackTitle.isNotBlank()) {
+                                val sec = parseAlbumDurationToSeconds(newDuration) ?: 0
+                                if (sec <= 0) return@clickable
+                                scope.launch {
+                                    if (onAddMusicToAlbum(newTrackTitle.trim(), sec, newGenre.trim())) {
+                                        newTrackTitle = ""
+                                        newDuration = ""
+                                        newGenre = "POP"
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Adicionar faixa", color = Color.White, fontSize = 13.sp)
+                    }
                     Spacer(modifier = Modifier.height(20.dp))
                 }
                 items(detail.tracks) { track ->
@@ -346,16 +478,223 @@ fun AlbumDetailScreen(
 
 @Composable
 fun AlbumScreen(
-    detail: AlbumDetailUi,
+    detail: AlbumDetailUi?,
     onBack: () -> Unit,
+    isCreateMode: Boolean = false,
+    onCreateAlbum: suspend (title: String, releaseYear: Int, musicIds: List<Long>) -> Boolean = { _, _, _ -> false },
+    onUpdateAlbum: suspend (id: String, title: String, releaseYear: Int) -> Boolean = { _, _, _ -> false },
+    onDeleteAlbum: suspend (id: String) -> Boolean = { false },
+    onAddMusicToAlbum: suspend (title: String, durationSeconds: Int, genre: String) -> Boolean = { _, _, _ -> false },
+    musicOptions: List<Pair<Long, String>> = emptyList(),
+    createMessage: String? = null,
     modifier: Modifier = Modifier
 ) {
-    AlbumDetailScreen(
-        detail = detail,
-        onBack = onBack,
-        modifier = modifier
-    )
+    if (isCreateMode) {
+        CreateAlbumScreen(
+            onBack = onBack,
+            onCreateAlbum = onCreateAlbum,
+            createMessage = createMessage,
+            musicOptions = musicOptions,
+            modifier = modifier
+        )
+    } else {
+        val safeDetail = detail ?: return
+        AlbumDetailScreen(
+            detail = safeDetail,
+            onUpdateAlbum = onUpdateAlbum,
+            onDeleteAlbum = onDeleteAlbum,
+            onAddMusicToAlbum = onAddMusicToAlbum,
+            onBack = onBack,
+            modifier = modifier
+        )
+    }
 }
+
+@Composable
+private fun CreateAlbumScreen(
+    onBack: () -> Unit,
+    onCreateAlbum: suspend (title: String, releaseYear: Int, musicIds: List<Long>) -> Boolean,
+    musicOptions: List<Pair<Long, String>>,
+    createMessage: String?,
+    modifier: Modifier = Modifier
+) {
+    val scope = rememberCoroutineScope()
+    var albumTitle by remember { mutableStateOf("") }
+    var releaseYearText by remember { mutableStateOf("") }
+    var selectedMusicIds by remember { mutableStateOf(listOf<Long>()) }
+    var step by remember { mutableStateOf(1) }
+    var feedbackMessage by remember { mutableStateOf<String?>(null) }
+    val releaseYear = releaseYearText.toIntOrNull()
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFF1B1D22))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 16.dp, start = 16.dp, end = 16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xFF23A7A2))
+                        .clickable { onBack() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowBack,
+                        contentDescription = "Voltar",
+                        tint = Color.White
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Criar Álbum",
+                    color = Color.White,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(20.dp))
+            if (step == 1) {
+                Text("1/3 - Início", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("Vamos criar seu álbum em 3 passos.", color = Color(0xFFBEBEC0), fontSize = 13.sp)
+                Spacer(modifier = Modifier.height(12.dp))
+                ActionButton("Começar") { step = 2 }
+            } else if (step == 2) {
+                Text("2/3 - Criar", color = Color.White, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = albumTitle,
+                    onValueChange = { albumTitle = it },
+                    label = { Text("Nome do Álbum") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = formColors()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = releaseYearText,
+                    onValueChange = { releaseYearText = it.filter { ch -> ch.isDigit() }.take(4) },
+                    label = { Text("Ano de lançamento") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = formColors()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                musicOptions.take(6).forEach { (musicId, musicName) ->
+                    val selected = selectedMusicIds.contains(musicId)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (selected) Color(0xFF23A7A2) else Color(0xFF343438))
+                            .clickable {
+                                selectedMusicIds = if (selected) selectedMusicIds - musicId else selectedMusicIds + musicId
+                            }
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(if (selected) "✓" else "○", color = Color.White, fontSize = 14.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(musicName, color = Color.White, fontSize = 13.sp)
+                    }
+                }
+                Spacer(modifier = Modifier.height(14.dp))
+                ActionButton(
+                    title = "Publicar",
+                    enabled = albumTitle.isNotBlank() && releaseYear != null
+                ) {
+                    scope.launch {
+                        val ok = onCreateAlbum(albumTitle.trim(), releaseYear ?: 0, selectedMusicIds)
+                        if (ok) {
+                            feedbackMessage = "Seu álbum foi postado com sucesso!"
+                            step = 3
+                        } else {
+                            feedbackMessage = "Falha ao criar álbum na API."
+                        }
+                    }
+                }
+            } else {
+                Text("3/3 - Concluído", color = Color.White, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = feedbackMessage ?: createMessage ?: "Álbum criado com sucesso!",
+                    color = Color(0xFFBEEEEB),
+                    fontSize = 13.sp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                ActionButton("OK!") {
+                    step = 1
+                    albumTitle = ""
+                    releaseYearText = ""
+                    selectedMusicIds = emptyList()
+                    onBack()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionButton(title: String, enabled: Boolean = true, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .background(if (enabled) Color(0xFF23A7A2) else Color(0xFF5C5F66))
+            .clickable(enabled = enabled) { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text = title, color = Color.White, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun ActionChip(title: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(Color(0xFF23A7A2))
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 6.dp)
+    ) {
+        Text(text = title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+private fun parseAlbumDurationToSeconds(raw: String): Int? {
+    val t = raw.trim()
+    if (t.isEmpty()) return null
+    val parts = t.split(":")
+    return when (parts.size) {
+        1 -> parts[0].toIntOrNull()
+        2 -> {
+            val m = parts[0].toIntOrNull() ?: return null
+            val s = parts[1].toIntOrNull() ?: return null
+            m * 60 + s
+        }
+        else -> null
+    }
+}
+
+@Composable
+private fun formColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = Color(0xFF23A7A2),
+    unfocusedBorderColor = Color(0xFF656870),
+    focusedLabelColor = Color(0xFF23A7A2),
+    unfocusedLabelColor = Color(0xFFBEBEC0),
+    focusedTextColor = Color.White,
+    unfocusedTextColor = Color.White,
+    cursorColor = Color(0xFF23A7A2)
+)
 
 
 @Preview(showBackground = true, showSystemUi = true)
@@ -375,6 +714,9 @@ private fun AlbumDetailScreenPreview() {
                     AlbumTrackUi(2, "VOY A LLeVARTE PA PR", "2:36")
                 )
             ),
+            onUpdateAlbum = { _, _, _ -> true },
+            onDeleteAlbum = { true },
+            onAddMusicToAlbum = { _, _, _ -> true },
             onBack = {}
         )
     }

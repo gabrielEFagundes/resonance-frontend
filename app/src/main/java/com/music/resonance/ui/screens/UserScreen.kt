@@ -68,7 +68,9 @@ fun UserScreen(
     birthDateLabel: String = "Data de nascimento: 08/03/2008",
     registrationLabel: String = "Inscrição: 18/03/2026",
     postedPlaylists: List<String> = listOf("Playlist 1", "Playlist 2", "Playlist 3"),
-    postedAlbums: List<String> = listOf("Álbum 1", "Álbum 2", "Álbum 3")
+    postedAlbums: List<String> = listOf("Álbum 1", "Álbum 2", "Álbum 3"),
+    onPostedPlaylistClick: (String) -> Unit = {},
+    onPostedAlbumClick: (String) -> Unit = {}
 ) {
     // Modo local (mock). Em produção, isso viria da conta do usuário.
     var isArtistMode by remember { mutableStateOf(false) }
@@ -243,7 +245,8 @@ fun UserScreen(
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalCards(
                     items = postedPlaylists,
-                    iconText = "♪"
+                    iconText = "♪",
+                    onItemClick = onPostedPlaylistClick
                 )
             } else {
                 Row(
@@ -269,7 +272,8 @@ fun UserScreen(
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalCards(
                     items = postedAlbums,
-                    iconText = "♪"
+                    iconText = "♪",
+                    onItemClick = onPostedAlbumClick
                 )
 
 
@@ -278,7 +282,8 @@ fun UserScreen(
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalCards(
                     items = postedPlaylists,
-                    iconText = "♪"
+                    iconText = "♪",
+                    onItemClick = onPostedPlaylistClick
                 )
             }
         }
@@ -344,7 +349,8 @@ private fun TealButtonText(
 @Composable
 private fun HorizontalCards(
     items: List<String>,
-    iconText: String
+    iconText: String,
+    onItemClick: (String) -> Unit
 ) {
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -356,7 +362,8 @@ private fun HorizontalCards(
                 modifier = Modifier
                     .size(width = 88.dp, height = 88.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(CardWhite),
+                    .background(CardWhite)
+                    .clickable { onItemClick(title) },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -375,7 +382,8 @@ private fun HorizontalCards(
                 fontSize = 11.sp,
                 modifier = Modifier
                     .width(88.dp)
-                    .padding(top = 0.dp),
+                    .padding(top = 0.dp)
+                    .clickable { onItemClick(title) },
                 textAlign = TextAlign.Center
             )
         }

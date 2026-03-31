@@ -65,6 +65,15 @@ data class CreateMusicRequestDto(
     val coverImageUrl: String = ""
 )
 
+data class UpdateMusicRequestDto(
+    val id: Long,
+    val title: String,
+    val artistId: Long,
+    val duration: Int,
+    val genre: String = "POP",
+    val coverImageUrl: String = ""
+)
+
 
 data class PlaylistDto(
     val id: Long?,
@@ -106,6 +115,7 @@ data class UpdatePlaylistRequestDto(
 data class UpdateAlbumRequestDto(
     val id: Long,
     val title: String,
+    @SerializedName("release_year")
     val releaseYear: Int,
     val artistId: Long,
     val coverImageUrl: String = ""
@@ -146,6 +156,12 @@ interface ResonanceApiService {
     @POST("musics")
     suspend fun createMusic(@Body body: CreateMusicRequestDto): MusicDto
 
+    @DELETE("musics/{id}")
+    suspend fun deleteMusic(@Path("id") id: Long): Response<ResponseBody>
+
+    @PUT("musics/{id}")
+    suspend fun updateMusic(@Path("id") id: Long, @Body body: UpdateMusicRequestDto): MusicDto
+
     @POST("playlists")
     suspend fun createPlaylist(@Body body: CreatePlaylistRequestDto): PlaylistDto
 
@@ -156,7 +172,7 @@ interface ResonanceApiService {
     suspend fun deletePlaylist(@Path("id") id: Long): Response<ResponseBody>
 
     @POST("playlists/{id}/musics/{musicId}")
-    suspend fun addMusicToPlaylist(@Path("id") id: Long, @Path("musicId") musicId: Long): PlaylistDto
+    suspend fun addMusicToPlaylist(@Path("id") id: Long, @Path("musicId") musicId: Long): Response<PlaylistDto>
 
     @POST("albums")
     suspend fun createAlbum(@Body body: CreateAlbumRequestDto): AlbumSummaryDto
@@ -168,7 +184,7 @@ interface ResonanceApiService {
     suspend fun deleteAlbum(@Path("id") id: Long): Response<ResponseBody>
 
     @POST("albums/{id}/musics/{musicId}")
-    suspend fun addMusicToAlbum(@Path("id") id: Long, @Path("musicId") musicId: Long): AlbumDetailDto
+    suspend fun addMusicToAlbum(@Path("id") id: Long, @Path("musicId") musicId: Long): Response<AlbumDetailDto>
 
     @PUT("users/{id}")
     suspend fun updateUser(@Path("id") id: Long, @Body body: UpdateUserRequestDto): UserDto

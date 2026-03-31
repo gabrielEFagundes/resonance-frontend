@@ -26,6 +26,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,7 +59,8 @@ data class AlbumDetailUi(
     val year: Int,
     val coverGradientStart: Long,
     val coverGradientEnd: Long,
-    val tracks: List<AlbumTrackUi>
+    val tracks: List<AlbumTrackUi>,
+    val artistId: Long? = null
 )
 
 
@@ -250,17 +252,24 @@ fun AlbumDetailScreen(
     detail: AlbumDetailUi,
     onUpdateAlbum: suspend (id: String, title: String, releaseYear: Int) -> Boolean,
     onDeleteAlbum: suspend (id: String) -> Boolean,
-    onAddMusicToAlbum: suspend (title: String, durationSeconds: Int, genre: String) -> Boolean = { _, _, _ -> false },
+    onAddMusicToAlbum: suspend (title: String, durationSeconds: Int, genre: String, artistId: Long) -> Boolean = { _, _, _, _ -> false },
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf(false) }
-    var editTitle by remember(detail.id) { mutableStateOf(detail.title) }
-    var editYear by remember(detail.id) { mutableStateOf(detail.year.toString()) }
+    var editTitle by remember { mutableStateOf(detail.title) }
+    var editYear by remember { mutableStateOf(detail.year.toString()) }
+    LaunchedEffect(detail.title, detail.year, editing) {
+        if (!editing) {
+            editTitle = detail.title
+            editYear = detail.year.toString()
+        }
+    }
     var newTrackTitle by remember(detail.id) { mutableStateOf("") }
     var newDuration by remember(detail.id) { mutableStateOf("") }
     var newGenre by remember(detail.id) { mutableStateOf("POP") }
+    var newArtistId by remember(detail.id) { mutableStateOf("") }
     val coverStart = Color(detail.coverGradientStart.toInt())
     val coverEnd = Color(detail.coverGradientEnd.toInt())
 
@@ -315,7 +324,7 @@ fun AlbumDetailScreen(
                     )
                     Spacer(modifier = Modifier.height(20.dp))
                     Text(
-                        text = detail.title,
+                        text = if (editing) editTitle else detail.title,
                         color = Color.White,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
@@ -323,7 +332,7 @@ fun AlbumDetailScreen(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "${detail.artist} ${detail.year}",
+                        text = "${detail.artist} ${if (editing) (editYear.toIntOrNull() ?: detail.year) else detail.year}",
                         color = Color(0xFF9BA1AB),
                         fontSize = 14.sp,
                         modifier = Modifier.padding(horizontal = 24.dp)
@@ -361,8 +370,12 @@ fun AlbumDetailScreen(
                             onClick = {
                                 if (editing) {
                                     scope.launch {
-                                        onUpdateAlbum(detail.id, editTitle, editYear.toIntOrNull() ?: detail.year)
-                                        editing = false
+                                        val ok = onUpdateAlbum(
+                                            detail.id,
+                                            editTitle,
+                                            editYear.toIntOrNull() ?: detail.year
+                                        )
+                                        if (ok) editing = false
                                     }
                                 } else {
                                     editing = true
@@ -373,7 +386,7 @@ fun AlbumDetailScreen(
                             title = "Excluir",
                             onClick = {
                                 scope.launch {
-                                    if (onDeleteAlbum(detail.id)) onBack()
+                                    onDeleteAlbum(detail.id)
                                 }
                             }
                         )
@@ -418,6 +431,17 @@ fun AlbumDetailScreen(
                             .padding(horizontal = 24.dp),
                         colors = formColors()
                     )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = newArtistId,
+                        onValueChange = { newArtistId = it.filter { ch -> ch.isDigit() } },
+                        label = { Text("ID do artista") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                        colors = formColors()
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                     Box(
                         modifier = Modifier
@@ -428,12 +452,15 @@ fun AlbumDetailScreen(
                             .background(Color(0xFF1E6768))
                             .clickable(enabled = newTrackTitle.isNotBlank()) {
                                 val sec = parseAlbumDurationToSeconds(newDuration) ?: 0
+                                val artistId = newArtistId.toLongOrNull() ?: 0L
                                 if (sec <= 0) return@clickable
+                                if (artistId <= 0L) return@clickable
                                 scope.launch {
-                                    if (onAddMusicToAlbum(newTrackTitle.trim(), sec, newGenre.trim())) {
+                                    if (onAddMusicToAlbum(newTrackTitle.trim(), sec, newGenre.trim(), artistId)) {
                                         newTrackTitle = ""
                                         newDuration = ""
                                         newGenre = "POP"
+                                        newArtistId = ""
                                     }
                                 }
                             },
@@ -484,7 +511,7 @@ fun AlbumScreen(
     onCreateAlbum: suspend (title: String, releaseYear: Int, musicIds: List<Long>) -> Boolean = { _, _, _ -> false },
     onUpdateAlbum: suspend (id: String, title: String, releaseYear: Int) -> Boolean = { _, _, _ -> false },
     onDeleteAlbum: suspend (id: String) -> Boolean = { false },
-    onAddMusicToAlbum: suspend (title: String, durationSeconds: Int, genre: String) -> Boolean = { _, _, _ -> false },
+    onAddMusicToAlbum: suspend (title: String, durationSeconds: Int, genre: String, artistId: Long) -> Boolean = { _, _, _, _ -> false },
     musicOptions: List<Pair<Long, String>> = emptyList(),
     createMessage: String? = null,
     modifier: Modifier = Modifier
@@ -716,7 +743,7 @@ private fun AlbumDetailScreenPreview() {
             ),
             onUpdateAlbum = { _, _, _ -> true },
             onDeleteAlbum = { true },
-            onAddMusicToAlbum = { _, _, _ -> true },
+            onAddMusicToAlbum = { _, _, _, _ -> true },
             onBack = {}
         )
     }

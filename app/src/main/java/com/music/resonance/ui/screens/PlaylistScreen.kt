@@ -59,8 +59,8 @@ fun PlaylistScreen(
     onCreatePlaylist: suspend (title: String, musicIds: List<Long>) -> Boolean = { _, _ -> false },
     onUpdatePlaylist: suspend (id: String, title: String) -> Boolean = { _, _ -> false },
     onDeletePlaylist: suspend (id: String) -> Boolean = { false },
-    onAddMusicToPlaylist: suspend (playlistId: String, title: String, durationSeconds: Int, genre: String) -> Boolean =
-        { _, _, _, _ -> false },
+    onAddMusicToPlaylist: suspend (playlistId: String, title: String, durationSeconds: Int, genre: String, artistId: Long) -> Boolean =
+        { _, _, _, _, _ -> false },
     musicOptions: List<Pair<Long, String>> = emptyList(),
     createMessage: String? = null,
     modifier: Modifier = Modifier
@@ -233,6 +233,7 @@ fun PlaylistScreen(
                         var newTrackTitle by remember(playlist.id) { mutableStateOf("") }
                         var newDuration by remember(playlist.id) { mutableStateOf("") }
                         var newGenre by remember(playlist.id) { mutableStateOf("POP") }
+                        var newArtistId by remember(playlist.id) { mutableStateOf(defaultArtistId.toString()) }
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -292,11 +293,7 @@ fun PlaylistScreen(
                                 )
                             }
                             Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = "Nova faixa (artista #$defaultArtistId)",
-                                color = Color(0xFFBEBEC0),
-                                fontSize = 12.sp
-                            )
+                            Text(text = "Nova faixa", color = Color(0xFFBEBEC0), fontSize = 12.sp)
                             OutlinedTextField(
                                 value = newTrackTitle,
                                 onValueChange = { newTrackTitle = it },
@@ -321,6 +318,14 @@ fun PlaylistScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = fieldColors()
                             )
+                            OutlinedTextField(
+                                value = newArtistId,
+                                onValueChange = { newArtistId = it.filter { ch -> ch.isDigit() } },
+                                label = { Text("ID do artista") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = fieldColors()
+                            )
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -329,12 +334,15 @@ fun PlaylistScreen(
                                     .background(Color(0xFF1E6768))
                                     .clickable(enabled = newTrackTitle.isNotBlank()) {
                                         val sec = parseDurationToSeconds(newDuration) ?: 0
+                                        val artistId = newArtistId.toLongOrNull() ?: 0L
                                         if (sec <= 0) return@clickable
+                                        if (artistId <= 0L) return@clickable
                                         scope.launch {
-                                            if (onAddMusicToPlaylist(playlist.id, newTrackTitle.trim(), sec, newGenre.trim())) {
+                                            if (onAddMusicToPlaylist(playlist.id, newTrackTitle.trim(), sec, newGenre.trim(), artistId)) {
                                                 newTrackTitle = ""
                                                 newDuration = ""
                                                 newGenre = "POP"
+                                                newArtistId = defaultArtistId.toString()
                                             }
                                         }
                                     },

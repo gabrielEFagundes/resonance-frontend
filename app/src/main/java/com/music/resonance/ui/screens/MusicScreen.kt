@@ -22,8 +22,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,9 +41,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.music.resonance.ui.theme.ResonanceTheme
+import kotlinx.coroutines.launch
 
 
 data class MusicTrackUi(
+    val id: Long?,
+    val artistId: Long?,
+    val genre: String,
     val number: Int,
     val title: String,
     val duration: String
@@ -56,9 +67,21 @@ fun MusicScreen(
     onAlbumsClick: () -> Unit,
     onArtistsClick: () -> Unit,
     sections: List<MusicSectionUi>,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    defaultArtistId: Long,
+    onCreateMusic: suspend (title: String, durationSeconds: Int, genre: String, artistId: Long) -> Boolean,
+    onDeleteMusic: suspend (musicId: Long) -> Boolean,
+    onUpdateMusic: suspend (musicId: Long, title: String, durationSeconds: Int, genre: String, artistId: Long) -> Boolean,
     profileImageUrl: String? = null,
     modifier: Modifier = Modifier
 ) {
+    val scope = rememberCoroutineScope()
+    var newTitle by remember { mutableStateOf("") }
+    var newDuration by remember { mutableStateOf("") }
+    var newGenre by remember { mutableStateOf("POP") }
+    var newArtistId by remember { mutableStateOf(defaultArtistId.toString()) }
+    val filteredSections = filterMusicSectionsByQuery(sections, searchQuery)
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -76,20 +99,96 @@ fun MusicScreen(
                 profileImageUrl = profileImageUrl
             )
             Spacer(modifier = Modifier.height(14.dp))
-            MusicSearchBar()
+            MusicSearchBar(query = searchQuery, onQueryChange = onSearchQueryChange)
             Spacer(modifier = Modifier.height(14.dp))
             MusicFilterRow(
                 onAlbumsClick = onAlbumsClick,
                 onArtistsClick = onArtistsClick
             )
             Spacer(modifier = Modifier.height(10.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF2C2F35))
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text("Criar música", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                OutlinedTextField(
+                    value = newTitle,
+                    onValueChange = { newTitle = it },
+                    label = { Text("Título") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = musicFieldColors()
+                )
+                OutlinedTextField(
+                    value = newDuration,
+                    onValueChange = { newDuration = it },
+                    label = { Text("Duração (3:45 ou segundos)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = musicFieldColors()
+                )
+                OutlinedTextField(
+                    value = newGenre,
+                    onValueChange = { newGenre = it },
+                    label = { Text("Gênero") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = musicFieldColors()
+                )
+                OutlinedTextField(
+                    value = newArtistId,
+                    onValueChange = { newArtistId = it.filter { ch -> ch.isDigit() } },
+                    label = { Text("ID do artista") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = musicFieldColors()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xFF1E6768))
+                        .clickable(enabled = newTitle.isNotBlank()) {
+                            val sec = parseMusicDurationToSeconds(newDuration) ?: 0
+                            val artistId = newArtistId.toLongOrNull() ?: 0L
+                            if (sec <= 0 || artistId <= 0L) return@clickable
+                            scope.launch {
+                                if (onCreateMusic(newTitle.trim(), sec, newGenre.trim(), artistId)) {
+                                    newTitle = ""
+                                    newDuration = ""
+                                    newGenre = "POP"
+                                    newArtistId = defaultArtistId.toString()
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Criar música", color = Color.White, fontSize = 13.sp)
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                items(sections) { section ->
-                    MusicSection(section = section)
+                items(filteredSections) { section ->
+                    MusicSection(
+                        section = section,
+                        defaultArtistId = defaultArtistId,
+                        onDeleteMusic = { musicId ->
+                            scope.launch { onDeleteMusic(musicId) }
+                        },
+                        onUpdateMusic = { musicId, title, durationSec, genre, artistId ->
+                            scope.launch { onUpdateMusic(musicId, title, durationSec, genre, artistId) }
+                        }
+                    )
                 }
             }
         }
@@ -169,28 +268,42 @@ private fun MusicHeader(
 
 
 @Composable
-private fun MusicSearchBar() {
-    Row(
+private fun MusicSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        singleLine = true,
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = "Buscar",
+                tint = Color(0xFFB9D7D8)
+            )
+        },
+        placeholder = {
+            Text(
+                text = "Encontre musicas",
+                color = Color(0xFFB9D7D8),
+                fontSize = 12.sp
+            )
+        },
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Color(0xFF1E6768),
+            unfocusedBorderColor = Color(0xFF1E6768),
+            focusedContainerColor = Color(0xFF1E6768),
+            unfocusedContainerColor = Color(0xFF1E6768),
+            focusedTextColor = Color.White,
+            unfocusedTextColor = Color.White,
+            cursorColor = Color.White
+        ),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 18.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(Color(0xFF1E6768))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = Icons.Default.Search,
-            contentDescription = "Buscar",
-            tint = Color(0xFFB9D7D8)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "Encontre albuns/artistas",
-            color = Color(0xFFB9D7D8),
-            fontSize = 12.sp
-        )
-    }
+    )
 }
 
 
@@ -251,7 +364,17 @@ private fun MusicFilterPill(
 
 
 @Composable
-private fun MusicSection(section: MusicSectionUi) {
+private fun MusicSection(
+    section: MusicSectionUi,
+    defaultArtistId: Long,
+    onDeleteMusic: (Long) -> Unit,
+    onUpdateMusic: (Long, String, Int, String, Long) -> Unit
+) {
+    var editingMusicId by remember { mutableStateOf<Long?>(null) }
+    var editTitle by remember { mutableStateOf("") }
+    var editDuration by remember { mutableStateOf("") }
+    var editGenre by remember { mutableStateOf(section.title) }
+    var editArtistId by remember { mutableStateOf(defaultArtistId.toString()) }
     Column {
         Text(
             text = section.title,
@@ -294,9 +417,130 @@ private fun MusicSection(section: MusicSectionUi) {
                         color = Color(0xFFEDEDED),
                         fontSize = 24.sp
                     )
+                    if (track.id != null) {
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Editar",
+                            color = Color(0xFF80CBC4),
+                            fontSize = 12.sp,
+                            modifier = Modifier.clickable {
+                                editingMusicId = track.id
+                                editTitle = track.title
+                                editDuration = track.duration
+                                editGenre = track.genre
+                                editArtistId = (track.artistId ?: defaultArtistId).toString()
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Excluir",
+                            color = Color(0xFFEF9A9A),
+                            fontSize = 12.sp,
+                            modifier = Modifier.clickable { onDeleteMusic(track.id) }
+                        )
+                    }
+                }
+                if (editingMusicId == track.id && track.id != null) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = editTitle,
+                        onValueChange = { editTitle = it },
+                        label = { Text("Título") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = musicFieldColors()
+                    )
+                    OutlinedTextField(
+                        value = editDuration,
+                        onValueChange = { editDuration = it },
+                        label = { Text("Duração") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = musicFieldColors()
+                    )
+                    OutlinedTextField(
+                        value = editGenre,
+                        onValueChange = { editGenre = it },
+                        label = { Text("Gênero") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = musicFieldColors()
+                    )
+                    OutlinedTextField(
+                        value = editArtistId,
+                        onValueChange = { editArtistId = it.filter { ch -> ch.isDigit() } },
+                        label = { Text("ID do artista") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = musicFieldColors()
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "Salvar",
+                            color = Color(0xFF80CBC4),
+                            fontSize = 12.sp,
+                            modifier = Modifier.clickable {
+                                val sec = parseMusicDurationToSeconds(editDuration) ?: 0
+                                val artistId = editArtistId.toLongOrNull() ?: 0L
+                                if (sec > 0 && artistId > 0L && editTitle.isNotBlank()) {
+                                    onUpdateMusic(track.id, editTitle.trim(), sec, editGenre.trim(), artistId)
+                                    editingMusicId = null
+                                }
+                            }
+                        )
+                        Text(
+                            text = "Cancelar",
+                            color = Color(0xFFBEBEC0),
+                            fontSize = 12.sp,
+                            modifier = Modifier.clickable { editingMusicId = null }
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+private fun parseMusicDurationToSeconds(raw: String): Int? {
+    val t = raw.trim()
+    if (t.isEmpty()) return null
+    val parts = t.split(":")
+    return when (parts.size) {
+        1 -> parts[0].toIntOrNull()
+        2 -> {
+            val m = parts[0].toIntOrNull() ?: return null
+            val s = parts[1].toIntOrNull() ?: return null
+            m * 60 + s
+        }
+        else -> null
+    }
+}
+
+@Composable
+private fun musicFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = Color(0xFF23A7A2),
+    unfocusedBorderColor = Color(0xFF656870),
+    focusedLabelColor = Color(0xFF23A7A2),
+    unfocusedLabelColor = Color(0xFFBEBEC0),
+    focusedTextColor = Color.White,
+    unfocusedTextColor = Color.White,
+    cursorColor = Color(0xFF23A7A2)
+)
+
+private fun filterMusicSectionsByQuery(
+    sections: List<MusicSectionUi>,
+    query: String
+): List<MusicSectionUi> {
+    val q = query.trim()
+    if (q.isBlank()) return sections
+    return sections.mapNotNull { section ->
+        val filteredTracks = section.tracks.filter { track ->
+            track.title.contains(q, ignoreCase = true)
+        }
+        val sectionMatches = section.title.contains(q, ignoreCase = true)
+        if (sectionMatches) section
+        else if (filteredTracks.isEmpty()) null
+        else section.copy(tracks = filteredTracks)
     }
 }
 
@@ -310,13 +554,19 @@ private fun MusicScreenPreview() {
             onUserIconClick = {},
             onAlbumsClick = {},
             onArtistsClick = {},
+            searchQuery = "",
+            onSearchQueryChange = {},
+            defaultArtistId = 1L,
+            onCreateMusic = { _, _, _, _ -> true },
+            onDeleteMusic = { true },
+            onUpdateMusic = { _, _, _, _, _ -> true },
             sections = listOf(
                 MusicSectionUi(
                     title = "Popular",
                     tracks = listOf(
-                        MusicTrackUi(1, "NUEVAYol", "3:03"),
-                        MusicTrackUi(2, "VOY A LLeVARTE PA PR", "2:36"),
-                        MusicTrackUi(3, "BAILE INoLVIDABLE", "2:36")
+                        MusicTrackUi(1L, 1L, "Popular", 1, "NUEVAYol", "3:03"),
+                        MusicTrackUi(2L, 1L, "Popular", 2, "VOY A LLeVARTE PA PR", "2:36"),
+                        MusicTrackUi(3L, 1L, "Popular", 3, "BAILE INoLVIDABLE", "2:36")
                     )
                 )
             )

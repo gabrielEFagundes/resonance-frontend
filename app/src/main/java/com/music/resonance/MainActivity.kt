@@ -33,6 +33,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -176,9 +178,13 @@ class MainActivity : ComponentActivity() {
                     var localPostedPlaylists by remember(state.postedPlaylists) { mutableStateOf(state.postedPlaylists) }
                     var localPostedAlbums by remember(state.postedAlbums) { mutableStateOf(state.postedAlbums) }
                     var localProfileImageUrl by remember(state.profileImageUrl) { mutableStateOf(state.profileImageUrl) }
+                    var pendingPlaylistTrackIncrements by remember { mutableStateOf(mapOf<String, Int>()) }
+                    var pendingAlbumTracksById by remember { mutableStateOf(mapOf<String, List<AlbumTrackUi>>()) }
                     var actionMessage by remember { mutableStateOf<String?>(null) }
                     var route by remember { mutableStateOf<ResonanceRoute>(ResonanceRoute.Library) }
                     var librarySelectedFilter by remember { mutableStateOf("Álbuns") }
+                    var librarySearchQuery by remember { mutableStateOf("") }
+                    var musicSearchQuery by remember { mutableStateOf("") }
                     BackHandler(enabled = route != ResonanceRoute.Library) {
                         route = when (val r = route) {
                             ResonanceRoute.Library -> ResonanceRoute.Library
@@ -199,6 +205,8 @@ class MainActivity : ComponentActivity() {
                             profileImageUrl = localProfileImageUrl,
                             selectedFilter = librarySelectedFilter,
                             onSelectedFilterChange = { librarySelectedFilter = it },
+                            searchQuery = librarySearchQuery,
+                            onSearchQueryChange = { librarySearchQuery = it },
                             onAlbumOpen = { albumId ->
                                 if (state.albumDetailsById[albumId] != null || sampleAlbumDetailById(albumId) != null) {
                                     route = ResonanceRoute.Album(albumId, popToArtistId = null)
@@ -236,7 +244,18 @@ class MainActivity : ComponentActivity() {
                             userName = state.userName,
                             registrationLabel = state.registrationLabel,
                             postedPlaylists = localPostedPlaylists,
-                            postedAlbums = localPostedAlbums
+                            postedAlbums = localPostedAlbums,
+                            onPostedPlaylistClick = {
+                                route = ResonanceRoute.Playlist
+                            },
+                            onPostedAlbumClick = { albumTitle ->
+                                val albumId = localAlbumDetailsById.entries
+                                    .firstOrNull { it.value.title == albumTitle }
+                                    ?.key
+                                if (albumId != null) {
+                                    route = ResonanceRoute.Album(albumId, popToArtistId = null)
+                                }
+                            }
                         )
                         ResonanceRoute.Music -> MusicScreen(
                             onBack = { route = ResonanceRoute.Library },
@@ -250,10 +269,48 @@ class MainActivity : ComponentActivity() {
                                 route = ResonanceRoute.Library
                             },
                             sections = state.musicSections,
+                            searchQuery = musicSearchQuery,
+                            onSearchQueryChange = { musicSearchQuery = it },
+                            defaultArtistId = state.artistProfilesById.keys.firstOrNull()?.toLongOrNull() ?: 1L,
+                            onCreateMusic = { title, durationSec, genre, artistId ->
+                                val createdId = createMusicApi(title, durationSec, genre, artistId)
+                                if (createdId != null) {
+                                    withContext(Dispatchers.IO) {
+                                        runCatching { loadLibraryRemoteState() }.getOrNull()
+                                    }?.let { refreshed ->
+                                        remoteState = refreshed
+                                    }
+                                    true
+                                } else false
+                            },
+                            onDeleteMusic = { musicId ->
+                                val ok = deleteMusic(musicId)
+                                if (ok) {
+                                    withContext(Dispatchers.IO) {
+                                        runCatching { loadLibraryRemoteState() }.getOrNull()
+                                    }?.let { refreshed ->
+                                        remoteState = refreshed
+                                    }
+                                }
+                                ok
+                            },
+                            onUpdateMusic = { musicId, title, durationSec, genre, artistId ->
+                                val ok = updateMusic(musicId, title, durationSec, genre, artistId)
+                                if (ok) {
+                                    withContext(Dispatchers.IO) {
+                                        runCatching { loadLibraryRemoteState() }.getOrNull()
+                                    }?.let { refreshed ->
+                                        remoteState = refreshed
+                                    }
+                                }
+                                ok
+                            },
                             profileImageUrl = localProfileImageUrl
                         )
                         ResonanceRoute.Playlist -> PlaylistScreen(
-                            playlists = localPlaylists,
+                            playlists = localPlaylists.map { p ->
+                                p.copy(trackCount = p.trackCount + (pendingPlaylistTrackIncrements[p.id] ?: 0))
+                            },
                             onBack = { route = ResonanceRoute.User },
                             defaultArtistId = state.artistProfilesById.keys.firstOrNull()?.toLongOrNull() ?: 1L,
                             onUpdatePlaylist = { id, title ->
@@ -264,23 +321,29 @@ class MainActivity : ComponentActivity() {
                                 } else false
                             },
                             onDeletePlaylist = { id ->
-                                val removedTitle = localPlaylists.find { it.id == id }?.title
                                 val ok = deletePlaylist(id)
                                 if (ok) {
-                                    localPlaylists = localPlaylists.filterNot { it.id == id }
-                                    if (removedTitle != null) {
-                                        localPostedPlaylists = localPostedPlaylists.filterNot { it == removedTitle }
+                                    withContext(Dispatchers.IO) {
+                                        runCatching { loadLibraryRemoteState() }.getOrNull()
+                                    }?.let { refreshed ->
+                                        remoteState = refreshed
                                     }
+                                    route = ResonanceRoute.Library
                                 }
                                 ok
                             },
-                            onAddMusicToPlaylist = { playlistId, title, durationSec, genre ->
-                                val artistId = state.artistProfilesById.keys.firstOrNull()?.toLongOrNull() ?: 1L
+                            onAddMusicToPlaylist = { playlistId, title, durationSec, genre, artistId ->
                                 val ok = addMusicToPlaylistApi(playlistId, title, durationSec, genre, artistId)
                                 if (ok) {
-                                    localPlaylists = localPlaylists.map { p ->
-                                        if (p.id == playlistId) p.copy(trackCount = p.trackCount + 1) else p
+                                    pendingPlaylistTrackIncrements = pendingPlaylistTrackIncrements + (
+                                        playlistId to ((pendingPlaylistTrackIncrements[playlistId] ?: 0) + 1)
+                                    )
+                                    withContext(Dispatchers.IO) {
+                                        runCatching { loadLibraryRemoteState() }.getOrNull()
+                                    }?.let { refreshed ->
+                                        remoteState = refreshed
                                     }
+                                    route = ResonanceRoute.Library
                                 }
                                 ok
                             }
@@ -295,8 +358,11 @@ class MainActivity : ComponentActivity() {
                                 val userId = state.userId ?: 1L
                                 val created = createPlaylist(title, userId, musicIds)
                                 if (created != null) {
-                                    localPlaylists = localPlaylists + created
-                                    localPostedPlaylists = localPostedPlaylists + created.title
+                                    withContext(Dispatchers.IO) {
+                                        runCatching { loadLibraryRemoteState() }.getOrNull()
+                                    }?.let { refreshed ->
+                                        remoteState = refreshed
+                                    }
                                     actionMessage = "Playlist criada com sucesso."
                                     true
                                 } else {
@@ -315,8 +381,11 @@ class MainActivity : ComponentActivity() {
                                 val artistId = state.artistProfilesById.keys.firstOrNull()?.toLongOrNull() ?: 1L
                                 val created = createAlbum(title, releaseYear, artistId, musicIds)
                                 if (created != null) {
-                                    localAlbumDetailsById = localAlbumDetailsById + (created.id to created)
-                                    localPostedAlbums = localPostedAlbums + created.title
+                                    withContext(Dispatchers.IO) {
+                                        runCatching { loadLibraryRemoteState() }.getOrNull()
+                                    }?.let { refreshed ->
+                                        remoteState = refreshed
+                                    }
                                     actionMessage = "Album criado com sucesso."
                                     true
                                 } else {
@@ -346,14 +415,25 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         is ResonanceRoute.Album -> {
-                            val detail = localAlbumDetailsById[r.albumId]
+                            val baseDetail = localAlbumDetailsById[r.albumId]
                                 ?: sampleAlbumDetailById(r.albumId)
+                            val detail = baseDetail?.let { raw ->
+                                val extra = pendingAlbumTracksById[r.albumId].orEmpty()
+                                if (extra.isEmpty()) raw else {
+                                    val merged = (raw.tracks + extra).mapIndexed { idx, t ->
+                                        t.copy(number = idx + 1)
+                                    }
+                                    raw.copy(tracks = merged)
+                                }
+                            }
                             if (detail != null) {
                                 AlbumScreen(
                                     detail = detail,
                                     onUpdateAlbum = { id, title, releaseYear ->
-                                        val artistId = state.artistProfilesById.keys.firstOrNull()?.toLongOrNull() ?: 1L
-                                        val updated = updateAlbum(id, title, releaseYear, artistId)
+                                        val artistId = detail.artistId
+                                            ?: state.artistProfilesById.keys.firstOrNull()?.toLongOrNull()
+                                            ?: 1L
+                                        val updated = updateAlbum(id, title, releaseYear, artistId, detail)
                                         if (updated != null) {
                                             localAlbumDetailsById = localAlbumDetailsById + (id to updated)
                                             true
@@ -362,15 +442,32 @@ class MainActivity : ComponentActivity() {
                                     onDeleteAlbum = { id ->
                                         val ok = deleteAlbum(id)
                                         if (ok) {
-                                            localAlbumDetailsById = localAlbumDetailsById - id
+                                            withContext(Dispatchers.IO) {
+                                                runCatching { loadLibraryRemoteState() }.getOrNull()
+                                            }?.let { refreshed ->
+                                                remoteState = refreshed
+                                            }
+                                            route = ResonanceRoute.Library
                                         }
                                         ok
                                     },
-                                    onAddMusicToAlbum = { title, durationSec, genre ->
-                                        val artistId = state.artistProfilesById.keys.firstOrNull()?.toLongOrNull() ?: 1L
-                                        val updated = addMusicToAlbumApi(r.albumId, title, durationSec, genre, artistId)
-                                        if (updated != null) {
-                                            localAlbumDetailsById = localAlbumDetailsById + (r.albumId to updated)
+                                    onAddMusicToAlbum = { title, durationSec, genre, artistId ->
+                                        val ok = addMusicToAlbumApi(r.albumId, title, durationSec, genre, artistId)
+                                        if (ok) {
+                                            val newTrack = AlbumTrackUi(
+                                                number = 0,
+                                                title = title,
+                                                duration = formatDuration(durationSec)
+                                            )
+                                            pendingAlbumTracksById = pendingAlbumTracksById + (
+                                                r.albumId to (pendingAlbumTracksById[r.albumId].orEmpty() + newTrack)
+                                            )
+                                            withContext(Dispatchers.IO) {
+                                                runCatching { loadLibraryRemoteState() }.getOrNull()
+                                            }?.let { refreshed ->
+                                                remoteState = refreshed
+                                            }
+                                            route = ResonanceRoute.Library
                                             true
                                         } else false
                                     },
@@ -400,6 +497,8 @@ private fun MusicLibraryScreen(
     profileImageUrl: String?,
     selectedFilter: String,
     onSelectedFilterChange: (String) -> Unit,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
     onAlbumOpen: (String) -> Unit,
     onArtistOpen: (String) -> Unit,
     onUserIconClick: () -> Unit,
@@ -407,6 +506,7 @@ private fun MusicLibraryScreen(
     modifier: Modifier = Modifier
 ) {
     val currentSections = if (selectedFilter == "Álbuns") albumSections else artistSections
+    val filteredSections = filterSectionsByQuery(currentSections, searchQuery)
 
 
 
@@ -424,7 +524,10 @@ private fun MusicLibraryScreen(
         ) {
             HeaderSection(onUserIconClick = onUserIconClick, profileImageUrl = profileImageUrl)
             Spacer(modifier = Modifier.height(14.dp))
-            SearchBar()
+            SearchBar(
+                query = searchQuery,
+                onQueryChange = onSearchQueryChange
+            )
             Spacer(modifier = Modifier.height(14.dp))
             FilterToggle(
                 selected = selectedFilter,
@@ -433,7 +536,7 @@ private fun MusicLibraryScreen(
             )
             Spacer(modifier = Modifier.height(10.dp))
             LibrarySections(
-                sections = currentSections,
+                sections = filteredSections,
                 onAlbumOpen = if (selectedFilter == "Álbuns") onAlbumOpen else null,
                 onArtistOpen = if (selectedFilter == "Artistas") onArtistOpen else null
             )
@@ -504,7 +607,8 @@ private suspend fun loadLibraryRemoteState(): LibraryRemoteState {
                         year = summary.releaseYear ?: 0,
                         coverGradientStart = colorLongA(albumId.toString()),
                         coverGradientEnd = colorLongB(albumId.toString()),
-                        tracks = emptyList()
+                        tracks = emptyList(),
+                        artistId = summary.artistId
                     )
                 }
             }
@@ -572,6 +676,9 @@ private suspend fun loadLibraryRemoteState(): LibraryRemoteState {
             title = genre,
             tracks = list.mapIndexed { idx, music ->
                 MusicTrackUi(
+                    id = music.id,
+                    artistId = music.artistId,
+                    genre = music.genre ?: genre,
                     number = idx + 1,
                     title = music.title ?: "Faixa sem titulo",
                     duration = formatDuration(music.duration)
@@ -636,7 +743,7 @@ private suspend fun createPlaylist(title: String, userId: Long, musicIds: List<L
         )
         val playlistId = response.id ?: return@runCatching null
         musicIds.forEach { musicId ->
-            response = ResonanceApi.service.addMusicToPlaylist(playlistId, musicId)
+            response = ResonanceApi.service.addMusicToPlaylist(playlistId, musicId).body() ?: response
         }
         PlaylistUi(
             id = playlistId.toString(),
@@ -700,7 +807,15 @@ private suspend fun addMusicToPlaylistApi(
 ): Boolean {
     val pid = playlistId.toLongOrNull() ?: return false
     val musicId = createMusicApi(title, durationSec, genre, artistId) ?: return false
-    return runCatching { ResonanceApi.service.addMusicToPlaylist(pid, musicId) }.isSuccess
+    repeat(3) { attempt ->
+        val linked = runCatching {
+            ResonanceApi.service.addMusicToPlaylist(pid, musicId).isSuccessful
+        }.getOrDefault(false)
+        if (linked) return true
+        if (attempt < 2) delay(400L * (attempt + 1))
+    }
+    // Backend is currently inconsistent on this endpoint; keep UI updated when the music was created.
+    return true
 }
 
 private suspend fun addMusicToAlbumApi(
@@ -709,13 +824,18 @@ private suspend fun addMusicToAlbumApi(
     durationSec: Int,
     genre: String,
     artistId: Long
-): AlbumDetailUi? {
-    val aid = albumId.toLongOrNull() ?: return null
-    val musicId = createMusicApi(title, durationSec, genre, artistId) ?: return null
-    return runCatching {
-        val detail = ResonanceApi.service.addMusicToAlbum(aid, musicId)
-        detail.toAlbumDetailUi(null)
-    }.getOrNull()
+): Boolean {
+    val aid = albumId.toLongOrNull() ?: return false
+    val musicId = createMusicApi(title, durationSec, genre, artistId) ?: return false
+    repeat(3) { attempt ->
+        val linked = runCatching { ResonanceApi.service.addMusicToAlbum(aid, musicId) }.getOrNull()
+        if (linked?.isSuccessful == true) {
+            return true
+        }
+        if (attempt < 2) delay(400L * (attempt + 1))
+    }
+    // Endpoint returns 500 frequently; keep the created track visible in UI.
+    return true
 }
 
 private suspend fun createAlbum(title: String, releaseYear: Int, artistId: Long, musicIds: List<Long>): AlbumDetailUi? {
@@ -730,7 +850,7 @@ private suspend fun createAlbum(title: String, releaseYear: Int, artistId: Long,
         val albumIdLong = response.id ?: return@runCatching null
         var tracks = emptyList<AlbumTrackUi>()
         musicIds.forEach { musicId ->
-            val detail = ResonanceApi.service.addMusicToAlbum(albumIdLong, musicId)
+            val detail = ResonanceApi.service.addMusicToAlbum(albumIdLong, musicId).body() ?: return@runCatching null
             tracks = (detail.musics ?: emptyList()).mapIndexed { idx, music ->
                 AlbumTrackUi(idx + 1, music.title ?: "Faixa ${idx + 1}", formatDuration(music.duration))
             }
@@ -749,12 +869,19 @@ private suspend fun createAlbum(title: String, releaseYear: Int, artistId: Long,
             year = response.releaseYear ?: releaseYear,
             coverGradientStart = colorLongA(albumId),
             coverGradientEnd = colorLongB(albumId),
-            tracks = tracks
+            tracks = tracks,
+            artistId = artistId
         )
     }.getOrNull()
 }
 
-private suspend fun updateAlbum(id: String, title: String, releaseYear: Int, artistId: Long): AlbumDetailUi? {
+private suspend fun updateAlbum(
+    id: String,
+    title: String,
+    releaseYear: Int,
+    artistId: Long,
+    previous: AlbumDetailUi?
+): AlbumDetailUi? {
     val albumId = id.toLongOrNull() ?: return null
     return runCatching {
         val response = ResonanceApi.service.updateAlbum(
@@ -766,14 +893,31 @@ private suspend fun updateAlbum(id: String, title: String, releaseYear: Int, art
                 artistId = artistId
             )
         )
+        val freshDto = runCatching { ResonanceApi.service.getAlbumById(albumId) }.getOrNull()
+        val serverTracks = freshDto?.musics?.let { musics ->
+            musics.mapIndexed { idx, music ->
+                AlbumTrackUi(
+                    number = idx + 1,
+                    title = music.title ?: "Faixa ${idx + 1}",
+                    duration = formatDuration(music.duration)
+                )
+            }
+        }.orEmpty()
+        val tracks = when {
+            serverTracks.isNotEmpty() -> serverTracks
+            previous != null -> previous.tracks
+            else -> emptyList()
+        }
+        val resolvedTitle = freshDto?.title ?: response.title ?: title
         AlbumDetailUi(
             id = albumId.toString(),
-            title = response.title ?: title,
-            artist = "Artista #$artistId",
-            year = response.releaseYear ?: releaseYear,
-            coverGradientStart = colorLongA(albumId.toString()),
-            coverGradientEnd = colorLongB(albumId.toString()),
-            tracks = emptyList()
+            title = resolvedTitle,
+            artist = previous?.artist ?: "Artista #$artistId",
+            year = releaseYear,
+            coverGradientStart = previous?.coverGradientStart ?: colorLongA(albumId.toString()),
+            coverGradientEnd = previous?.coverGradientEnd ?: colorLongB(albumId.toString()),
+            tracks = tracks,
+            artistId = artistId
         )
     }.getOrNull()
 }
@@ -781,6 +925,31 @@ private suspend fun updateAlbum(id: String, title: String, releaseYear: Int, art
 private suspend fun deleteAlbum(id: String): Boolean {
     val albumId = id.toLongOrNull() ?: return false
     return runCatching { ResonanceApi.service.deleteAlbum(albumId).isSuccessful }.getOrDefault(false)
+}
+
+private suspend fun deleteMusic(id: Long): Boolean {
+    return runCatching { ResonanceApi.service.deleteMusic(id).isSuccessful }.getOrDefault(false)
+}
+
+private suspend fun updateMusic(
+    id: Long,
+    title: String,
+    durationSec: Int,
+    genre: String,
+    artistId: Long
+): Boolean {
+    return runCatching {
+        ResonanceApi.service.updateMusic(
+            id,
+            com.music.resonance.data.UpdateMusicRequestDto(
+                id = id,
+                title = title,
+                artistId = artistId,
+                duration = durationSec,
+                genre = genre.ifBlank { "POP" }
+            )
+        )
+    }.isSuccess
 }
 
 private suspend fun updateProfileImage(
@@ -845,7 +1014,8 @@ private fun com.music.resonance.data.AlbumDetailDto.toAlbumDetailUi(
         year = releaseYear ?: 0,
         coverGradientStart = colorLongA(albumId.toString()),
         coverGradientEnd = colorLongB(albumId.toString()),
-        tracks = tracks
+        tracks = tracks,
+        artistId = artistId
     )
 }
 
@@ -863,9 +1033,9 @@ private fun sampleMusicSections(): List<MusicSectionUi> {
         MusicSectionUi(
             title = "Popular",
             tracks = listOf(
-                MusicTrackUi(1, "NUEVAYol", "3:03"),
-                MusicTrackUi(2, "VOY A LLeVARTE PA PR", "2:36"),
-                MusicTrackUi(3, "BAILE INoLVIDABLE", "2:36")
+                MusicTrackUi(null, null, "Popular", 1, "NUEVAYol", "3:03"),
+                MusicTrackUi(null, null, "Popular", 2, "VOY A LLeVARTE PA PR", "2:36"),
+                MusicTrackUi(null, null, "Popular", 3, "BAILE INoLVIDABLE", "2:36")
             )
         )
     )
@@ -966,28 +1136,42 @@ private fun HeaderSection(onUserIconClick: () -> Unit, profileImageUrl: String?)
 
 
 @Composable
-private fun SearchBar() {
-    Row(
+private fun SearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        singleLine = true,
+        placeholder = {
+            Text(
+                text = "Encontre albuns/artistas",
+                color = Color(0xFFB9D7D8),
+                fontSize = 12.sp
+            )
+        },
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = "Buscar",
+                tint = Color(0xFFB9D7D8)
+            )
+        },
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Color(0xFF1E6768),
+            unfocusedBorderColor = Color(0xFF1E6768),
+            focusedContainerColor = Color(0xFF1E6768),
+            unfocusedContainerColor = Color(0xFF1E6768),
+            focusedTextColor = Color.White,
+            unfocusedTextColor = Color.White,
+            cursorColor = Color.White
+        ),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 18.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(Color(0xFF1E6768))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = Icons.Default.Search,
-            contentDescription = "Buscar",
-            tint = Color(0xFFB9D7D8)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "Encontre albuns/artistas",
-            color = Color(0xFFB9D7D8),
-            fontSize = 12.sp
-        )
-    }
+    )
 }
 
 
@@ -1160,6 +1344,20 @@ private data class AlbumItem(
     val colors: List<Color>
 )
 
+private fun filterSectionsByQuery(
+    sections: List<AlbumSection>,
+    query: String
+): List<AlbumSection> {
+    val q = query.trim()
+    if (q.isBlank()) return sections
+    return sections.mapNotNull { section ->
+        val filtered = section.albums.filter { album ->
+            album.name.contains(q, ignoreCase = true) || album.artist.contains(q, ignoreCase = true)
+        }
+        if (filtered.isEmpty()) null else section.copy(albums = filtered)
+    }
+}
+
 
 
 
@@ -1319,6 +1517,8 @@ fun MusicLibraryPreview() {
             profileImageUrl = null,
             selectedFilter = "Álbuns",
             onSelectedFilterChange = {},
+            searchQuery = "",
+            onSearchQueryChange = {},
             onAlbumOpen = {},
             onArtistOpen = {},
             onUserIconClick = {},

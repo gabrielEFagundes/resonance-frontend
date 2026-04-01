@@ -4,5 +4,6 @@ data class Album (
     val id: String,
     val title: String,
     val releaseYear: Int,
-    val artistID: Long
+    val artistId: Long,
+    val coverImageUrl: String
 )

@@ -5,14 +5,21 @@ import java.sql.Date
 data class Artist (
     override val id: Long,
     override val name: String,
-    override val loginDate: Date,
+    override val email: String,
+    override val password: String,
+    override val loginDate: String,
+    override val profilePictureUrl: String?,
 
-    val artisticName: String,
-    val monthlyListeners: Long,
-    val description:String
+    val artisticName: String?,
+    val monthlyListeners: Long?,
+    val description: String?
 
 ): User(
     id,
     name,
-    loginDate
+    email,
+    password,
+    loginDate,
+    profilePictureUrl
+
 )

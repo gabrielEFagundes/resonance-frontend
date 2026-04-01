@@ -29,7 +29,7 @@ interface ArtistAPIService{
 }
 
 object ArtistClient{
-    private const val BASE_URL = "http://10.0.2.2:8081/artists/"
+    private const val BASE_URL = "https://resonance-api-bfax.onrender.com/artists/"
 
     val apiService: ArtistAPIService by lazy{
         Retrofit.Builder()

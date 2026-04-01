@@ -89,7 +89,9 @@ data class UserDto(
     @SerializedName(value = "loginDate", alternate = ["login_date"])
     val loginDate: String?,
     @SerializedName(value = "profilePictureUrl", alternate = ["profile_picture_url"])
-    val profilePictureUrl: String?
+    val profilePictureUrl: String?,
+    val email: String? = null,
+    val password: String? = null
 )
 
 data class CreatePlaylistRequestDto(
@@ -128,6 +130,25 @@ data class UpdateUserRequestDto(
     val profilePictureUrl: String?
 )
 
+data class CreateUserRequestDto(
+    val name: String,
+    val email: String,
+    val password: String,
+    val loginDate: String? = null,
+    val profilePictureUrl: String? = null
+)
+
+data class CreateArtistRequestDto(
+    val name: String,
+    val email: String,
+    val password: String,
+    val artisticName: String,
+    val description: String,
+    val monthlyListeners: Long = 0,
+    val loginDate: String? = null,
+    val profilePictureUrl: String? = null
+)
+
 
 interface ResonanceApiService {
     @GET("artists")
@@ -152,6 +173,12 @@ interface ResonanceApiService {
 
     @GET("users")
     suspend fun getUsers(): List<UserDto>
+
+    @POST("users")
+    suspend fun createUser(@Body body: CreateUserRequestDto): UserDto
+
+    @POST("artists")
+    suspend fun createArtist(@Body body: CreateArtistRequestDto): ArtistResponseDto
 
     @POST("musics")
     suspend fun createMusic(@Body body: CreateMusicRequestDto): MusicDto

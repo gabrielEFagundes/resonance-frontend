@@ -3,6 +3,7 @@ package com.music.resonance
 
 
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -57,8 +58,14 @@ import com.music.resonance.data.AlbumSummaryDto
 import com.music.resonance.data.ArtistResponseDto
 import com.music.resonance.data.MusicDto
 import com.music.resonance.data.PlaylistDto
+import com.music.resonance.data.CreateArtistRequestDto
+import com.music.resonance.data.CreateUserRequestDto
 import com.music.resonance.data.ResonanceApi
 import com.music.resonance.data.UserDto
+import com.music.resonance.ui.screens.LoginAuthScreen
+import com.music.resonance.ui.screens.RegisterAuthScreen
+import com.music.resonance.ui.screens.RegisterFormPayload
+import com.music.resonance.ui.screens.WelcomeAuthScreen
 import com.music.resonance.ui.screens.AlbumScreen
 import com.music.resonance.ui.screens.AlbumTrackUi
 import com.music.resonance.ui.screens.AlbumDetailUi
@@ -98,6 +105,12 @@ private sealed class ResonanceRoute {
     data class Album(val albumId: String, val popToArtistId: String?) : ResonanceRoute()
 }
 
+private enum class AuthRoute {
+    Welcome,
+    Register,
+    Login
+}
+
 
 private data class ApiBootstrap(
     val artists: List<ArtistResponseDto>,
@@ -121,7 +134,8 @@ private data class LibraryRemoteState(
     val registrationLabel: String,
     val profileImageUrl: String?,
     val postedPlaylists: List<String>,
-    val postedAlbums: List<String>
+    val postedAlbums: List<String>,
+    val isArtist: Boolean
 )
 
 
@@ -137,11 +151,20 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize().background(color = Color(0xFF1B1D22)).safeDrawingPadding(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    val prefs = remember { getSharedPreferences("resonance_auth", Context.MODE_PRIVATE) }
+                    var loggedInUserId by remember {
+                        mutableStateOf(prefs.getLong("user_id", -1L).takeIf { it > 0 })
+                    }
+                    var authRoute by remember { mutableStateOf(AuthRoute.Welcome) }
                     var remoteState by remember { mutableStateOf<LibraryRemoteState?>(null) }
 
-                    LaunchedEffect(Unit) {
+                    LaunchedEffect(loggedInUserId) {
+                        if (loggedInUserId == null) {
+                            remoteState = null
+                            return@LaunchedEffect
+                        }
                         remoteState = withContext(Dispatchers.IO) {
-                            runCatching { loadLibraryRemoteState() }.getOrElse {
+                            runCatching { loadLibraryRemoteState(preferredUserId = loggedInUserId) }.getOrElse {
                                 LibraryRemoteState(
                                     albumSections = sampleAlbumSections(),
                                     artistSections = sampleArtistSections(),
@@ -151,26 +174,55 @@ class MainActivity : ComponentActivity() {
                                     musicOptions = emptyList(),
                                     playlists = emptyList(),
                                     userName = "Usuario",
-                                    userId = null,
+                                    userId = loggedInUserId,
                                     registrationLabel = "Inscricao indisponivel",
                                     profileImageUrl = null,
                                     postedPlaylists = emptyList(),
-                                    postedAlbums = emptyList()
+                                    postedAlbums = emptyList(),
+                                    isArtist = false
                                 )
                             }
                         }
                     }
 
-                    if (remoteState == null) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = Color(0xFF23A7A2))
-                        }
-                        return@Surface
+                    BackHandler(enabled = loggedInUserId == null && authRoute != AuthRoute.Welcome) {
+                        authRoute = AuthRoute.Welcome
                     }
 
+                    when {
+                        loggedInUserId == null -> {
+                            when (authRoute) {
+                                AuthRoute.Welcome -> WelcomeAuthScreen(
+                                    onCreateAccount = { authRoute = AuthRoute.Register },
+                                    onLogin = { authRoute = AuthRoute.Login }
+                                )
+                                AuthRoute.Register -> RegisterAuthScreen(
+                                    onBack = { authRoute = AuthRoute.Welcome },
+                                    register = { payload -> registerUserAccount(payload) },
+                                    onRegistered = { userId ->
+                                        prefs.edit().putLong("user_id", userId).apply()
+                                        loggedInUserId = userId
+                                    }
+                                )
+                                AuthRoute.Login -> LoginAuthScreen(
+                                    onBack = { authRoute = AuthRoute.Welcome },
+                                    login = { email, password -> loginUserAccount(email, password) },
+                                    onLoggedIn = { userId ->
+                                        prefs.edit().putLong("user_id", userId).apply()
+                                        loggedInUserId = userId
+                                    }
+                                )
+                            }
+                        }
+                        remoteState == null -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(color = Color(0xFF23A7A2))
+                            }
+                        }
+                        else -> {
                     val scope = rememberCoroutineScope()
                     val state = remoteState!!
                     var localPlaylists by remember(state.playlists) { mutableStateOf(state.playlists) }
@@ -225,7 +277,15 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                         ResonanceRoute.User -> UserScreen(
+                            isArtist = state.isArtist,
                             onBack = { route = ResonanceRoute.Library },
+                            onLogout = {
+                                prefs.edit().remove("user_id").apply()
+                                loggedInUserId = null
+                                authRoute = AuthRoute.Welcome
+                                remoteState = null
+                                route = ResonanceRoute.Library
+                            },
                             onOpenPlaylists = { route = ResonanceRoute.CreatePlaylist },
                             onOpenAlbums = { route = ResonanceRoute.CreateAlbum },
                             remoteProfileImageUrl = localProfileImageUrl,
@@ -276,7 +336,7 @@ class MainActivity : ComponentActivity() {
                                 val createdId = createMusicApi(title, durationSec, genre, artistId)
                                 if (createdId != null) {
                                     withContext(Dispatchers.IO) {
-                                        runCatching { loadLibraryRemoteState() }.getOrNull()
+                                        runCatching { loadLibraryRemoteState(state.userId) }.getOrNull()
                                     }?.let { refreshed ->
                                         remoteState = refreshed
                                     }
@@ -287,7 +347,7 @@ class MainActivity : ComponentActivity() {
                                 val ok = deleteMusic(musicId)
                                 if (ok) {
                                     withContext(Dispatchers.IO) {
-                                        runCatching { loadLibraryRemoteState() }.getOrNull()
+                                        runCatching { loadLibraryRemoteState(state.userId) }.getOrNull()
                                     }?.let { refreshed ->
                                         remoteState = refreshed
                                     }
@@ -298,7 +358,7 @@ class MainActivity : ComponentActivity() {
                                 val ok = updateMusic(musicId, title, durationSec, genre, artistId)
                                 if (ok) {
                                     withContext(Dispatchers.IO) {
-                                        runCatching { loadLibraryRemoteState() }.getOrNull()
+                                        runCatching { loadLibraryRemoteState(state.userId) }.getOrNull()
                                     }?.let { refreshed ->
                                         remoteState = refreshed
                                     }
@@ -324,7 +384,7 @@ class MainActivity : ComponentActivity() {
                                 val ok = deletePlaylist(id)
                                 if (ok) {
                                     withContext(Dispatchers.IO) {
-                                        runCatching { loadLibraryRemoteState() }.getOrNull()
+                                        runCatching { loadLibraryRemoteState(state.userId) }.getOrNull()
                                     }?.let { refreshed ->
                                         remoteState = refreshed
                                     }
@@ -339,7 +399,7 @@ class MainActivity : ComponentActivity() {
                                         playlistId to ((pendingPlaylistTrackIncrements[playlistId] ?: 0) + 1)
                                     )
                                     withContext(Dispatchers.IO) {
-                                        runCatching { loadLibraryRemoteState() }.getOrNull()
+                                        runCatching { loadLibraryRemoteState(state.userId) }.getOrNull()
                                     }?.let { refreshed ->
                                         remoteState = refreshed
                                     }
@@ -359,7 +419,7 @@ class MainActivity : ComponentActivity() {
                                 val created = createPlaylist(title, userId, musicIds)
                                 if (created != null) {
                                     withContext(Dispatchers.IO) {
-                                        runCatching { loadLibraryRemoteState() }.getOrNull()
+                                        runCatching { loadLibraryRemoteState(state.userId) }.getOrNull()
                                     }?.let { refreshed ->
                                         remoteState = refreshed
                                     }
@@ -382,7 +442,7 @@ class MainActivity : ComponentActivity() {
                                 val created = createAlbum(title, releaseYear, artistId, musicIds)
                                 if (created != null) {
                                     withContext(Dispatchers.IO) {
-                                        runCatching { loadLibraryRemoteState() }.getOrNull()
+                                        runCatching { loadLibraryRemoteState(state.userId) }.getOrNull()
                                     }?.let { refreshed ->
                                         remoteState = refreshed
                                     }
@@ -443,7 +503,7 @@ class MainActivity : ComponentActivity() {
                                         val ok = deleteAlbum(id)
                                         if (ok) {
                                             withContext(Dispatchers.IO) {
-                                                runCatching { loadLibraryRemoteState() }.getOrNull()
+                                                runCatching { loadLibraryRemoteState(state.userId) }.getOrNull()
                                             }?.let { refreshed ->
                                                 remoteState = refreshed
                                             }
@@ -463,7 +523,7 @@ class MainActivity : ComponentActivity() {
                                                 r.albumId to (pendingAlbumTracksById[r.albumId].orEmpty() + newTrack)
                                             )
                                             withContext(Dispatchers.IO) {
-                                                runCatching { loadLibraryRemoteState() }.getOrNull()
+                                                runCatching { loadLibraryRemoteState(state.userId) }.getOrNull()
                                             }?.let { refreshed ->
                                                 remoteState = refreshed
                                             }
@@ -480,6 +540,8 @@ class MainActivity : ComponentActivity() {
                                 route = ResonanceRoute.Library
                             }
                         }
+                    }
+                    }
                     }
                 }
             }
@@ -549,6 +611,38 @@ private fun MusicLibraryScreen(
  * Plano gratuito do Render “dorme” o serviço. Várias requisições paralelas no primeiro ping costumam
  * falhar todas ao mesmo tempo. Uma sequência leve com backoff dá tempo do backend ficar pronto.
  */
+private suspend fun registerUserAccount(payload: RegisterFormPayload): Long? {
+    return runCatching {
+        if (payload.isArtistic) {
+            val body = CreateArtistRequestDto(
+                name = payload.name,
+                email = payload.email,
+                password = payload.password,
+                artisticName = payload.artisticName,
+                description = payload.description
+            )
+            val res = ResonanceApi.service.createArtist(body)
+            res.id ?: error("no id")
+        } else {
+            val body = CreateUserRequestDto(
+                name = payload.name,
+                email = payload.email,
+                password = payload.password
+            )
+            val res = ResonanceApi.service.createUser(body)
+            res.id ?: error("no id")
+        }
+    }.getOrNull()
+}
+
+private suspend fun loginUserAccount(email: String, password: String): Long? {
+    return runCatching {
+        val users = ResonanceApi.service.getUsers()
+        val user = users.find { it.email == email && it.password == password }
+        user?.id ?: error("user not found")
+    }.getOrNull()
+}
+
 private suspend fun wakeBackendAfterColdStart() {
     repeat(5) { attempt ->
         val ok = runCatching { ResonanceApi.service.getArtists() }.isSuccess
@@ -572,7 +666,7 @@ private suspend fun fetchBootstrap(endpointErrors: MutableList<String>): ApiBoot
     )
 }
 
-private suspend fun loadLibraryRemoteState(): LibraryRemoteState {
+private suspend fun loadLibraryRemoteState(preferredUserId: Long? = null): LibraryRemoteState {
     val endpointErrors = mutableListOf<String>()
     var bootstrap = fetchBootstrap(endpointErrors)
     if (endpointErrors.size >= 5) {
@@ -705,16 +799,21 @@ private suspend fun loadLibraryRemoteState(): LibraryRemoteState {
     }
 
 
-    val firstUser = users.firstOrNull()
-    val userName = firstUser?.name ?: "Usuario"
-    val userId = firstUser?.id
+    val firstUser = when {
+        preferredUserId != null -> users.firstOrNull { it.id == preferredUserId } ?: users.firstOrNull()
+        else -> users.firstOrNull()
+    }
+    val firstArtist = artists.firstOrNull { it.id == preferredUserId }
+    val isArtist = firstArtist != null
+
+    val userName = firstArtist?.name ?: firstUser?.name ?: "Usuario"
+    val userId = preferredUserId ?: firstUser?.id
     val registrationLabel = "Login: ${firstUser?.loginDate ?: "N/A"}"
     val profileImageUrl = firstUser?.profilePictureUrl
     val postedPlaylists = playlistUis.filter { p ->
         userId == null || usersById[userId]?.name == p.owner
     }.map { it.title }.ifEmpty { playlistUis.map { it.title } }
     val postedAlbums = albums.take(8).map { it.title ?: "Album sem titulo" }
-
 
     return LibraryRemoteState(
         albumSections = albumSections,
@@ -729,7 +828,8 @@ private suspend fun loadLibraryRemoteState(): LibraryRemoteState {
         registrationLabel = registrationLabel,
         profileImageUrl = profileImageUrl,
         postedPlaylists = postedPlaylists,
-        postedAlbums = postedAlbums
+        postedAlbums = postedAlbums,
+        isArtist = isArtist
     )
 }
 

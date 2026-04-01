@@ -1,6 +1,11 @@
 package com.music.resonance.ui.screens
 
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -34,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -77,6 +85,7 @@ fun MusicScreen(
     modifier: Modifier = Modifier
 ) {
     val scope = rememberCoroutineScope()
+    var createMusicExpanded by remember { mutableStateOf(false) }
     var newTitle by remember { mutableStateOf("") }
     var newDuration by remember { mutableStateOf("") }
     var newGenre by remember { mutableStateOf("POP") }
@@ -115,66 +124,101 @@ fun MusicScreen(
                     .padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text("Criar música", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                OutlinedTextField(
-                    value = newTitle,
-                    onValueChange = { newTitle = it },
-                    label = { Text("Título") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = musicFieldColors()
-                )
-                OutlinedTextField(
-                    value = newDuration,
-                    onValueChange = { newDuration = it },
-                    label = { Text("Duração (3:45 ou segundos)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = musicFieldColors()
-                )
-                OutlinedTextField(
-                    value = newGenre,
-                    onValueChange = { newGenre = it },
-                    label = { Text("Gênero") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = musicFieldColors()
-                )
-                OutlinedTextField(
-                    value = newArtistId,
-                    onValueChange = { newArtistId = it.filter { ch -> ch.isDigit() } },
-                    label = { Text("ID do artista") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = musicFieldColors()
-                )
-                Box(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(40.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(Color(0xFF1E6768))
-                        .clickable(enabled = newTitle.isNotBlank()) {
-                            val sec = parseMusicDurationToSeconds(newDuration) ?: 0
-                            val artistId = newArtistId.toLongOrNull() ?: 0L
-                            if (sec <= 0 || artistId <= 0L) return@clickable
-                            scope.launch {
-                                if (onCreateMusic(newTitle.trim(), sec, newGenre.trim(), artistId)) {
-                                    newTitle = ""
-                                    newDuration = ""
-                                    newGenre = "POP"
-                                    newArtistId = defaultArtistId.toString()
-                                }
-                            }
-                        },
-                    contentAlignment = Alignment.Center
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { createMusicExpanded = !createMusicExpanded },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("Criar música", color = Color.White, fontSize = 13.sp)
+                    Text(
+                        "Criar música",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        contentDescription = if (createMusicExpanded) "Recolher formulário" else "Abrir formulário",
+                        tint = Color(0xFFBEBEC0),
+                        modifier = Modifier.rotate(if (createMusicExpanded) 180f else 0f)
+                    )
+                }
+                AnimatedVisibility(
+                    visible = createMusicExpanded,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = newTitle,
+                            onValueChange = { newTitle = it },
+                            label = { Text("Título") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = musicFieldColors()
+                        )
+                        OutlinedTextField(
+                            value = newDuration,
+                            onValueChange = { newDuration = it },
+                            label = { Text("Duração (3:45 ou segundos)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = musicFieldColors()
+                        )
+                        OutlinedTextField(
+                            value = newGenre,
+                            onValueChange = { newGenre = it },
+                            label = { Text("Gênero") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = musicFieldColors()
+                        )
+                        OutlinedTextField(
+                            value = newArtistId,
+                            onValueChange = { newArtistId = it.filter { ch -> ch.isDigit() } },
+                            label = { Text("ID do artista") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = musicFieldColors()
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color(0xFF1E6768))
+                                .clickable(enabled = newTitle.isNotBlank()) {
+                                    val sec = parseMusicDurationToSeconds(newDuration) ?: 0
+                                    val artistId = newArtistId.toLongOrNull() ?: 0L
+                                    if (sec <= 0 || artistId <= 0L) return@clickable
+                                    scope.launch {
+                                        if (onCreateMusic(newTitle.trim(), sec, newGenre.trim(), artistId)) {
+                                            newTitle = ""
+                                            newDuration = ""
+                                            newGenre = "POP"
+                                            newArtistId = defaultArtistId.toString()
+                                            createMusicExpanded = false
+                                        }
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Criar música", color = Color.White, fontSize = 13.sp)
+                        }
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(10.dp))
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
                 contentPadding = PaddingValues(bottom = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {

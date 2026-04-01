@@ -59,7 +59,9 @@ private val CardIconBlack = Color(0xFF0B0B0B)
 @Composable
 fun UserScreen(
     modifier: Modifier = Modifier,
+    isArtist: Boolean = false,
     onBack: () -> Unit = {},
+    onLogout: () -> Unit = {},
     onOpenPlaylists: () -> Unit = {},
     onOpenAlbums: () -> Unit = {},
     remoteProfileImageUrl: String? = null,
@@ -72,8 +74,7 @@ fun UserScreen(
     onPostedPlaylistClick: (String) -> Unit = {},
     onPostedAlbumClick: (String) -> Unit = {}
 ) {
-    // Modo local (mock). Em produção, isso viria da conta do usuário.
-    var isArtistMode by remember { mutableStateOf(false) }
+    // Modo é dictado externamente pelo isArtist
 
 
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
@@ -220,20 +221,7 @@ fun UserScreen(
             )
 
 
-            Spacer(modifier = Modifier.height(26.dp))
-
-
-            TealButtonText(
-                text = if (isArtistMode) "Voltar para Usuário" else "Entrar em modo Artista",
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { isArtistMode = !isArtistMode }
-            )
-
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-
-            if (!isArtistMode) {
+            if (!isArtist) {
                 // UX do usuário: só playlists
                 TealButtonText(
                     text = "Postar Playlist",
@@ -303,6 +291,25 @@ fun UserScreen(
                 text = "◀",
                 color = Color.White,
                 fontSize = 14.sp
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(end = 18.dp, top = 48.dp)
+                .height(44.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(Color(0xFFD32F2F))
+                .clickable { onLogout() }
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Sair",
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
             )
         }
     }

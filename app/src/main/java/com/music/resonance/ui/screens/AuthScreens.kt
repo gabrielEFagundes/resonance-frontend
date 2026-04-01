@@ -24,7 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Search
+import com.music.resonance.R
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -200,7 +201,9 @@ fun RegisterAuthScreen(
                         name.isBlank() -> errorMessage = "Informe o nome."
                         email.isBlank() -> errorMessage = "Informe o e-mail."
                         password.length < 4 -> errorMessage = "Senha muito curta."
-                        isArtistic && artisticName.isBlank() -> errorMessage = "Informe o nome artistico."
+                        isArtistic && artisticName.isBlank() -> errorMessage =
+                            "Informe o nome artistico."
+
                         isArtistic && description.isBlank() -> errorMessage = "Informe a descricao."
                     }
                     if (errorMessage != null) return@clickable
@@ -356,17 +359,14 @@ private fun ResonanceBranding() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            modifier = Modifier
-                .size(88.dp)
-                .clip(CircleShape)
-                .background(TealAccent),
+            modifier = Modifier.size(120.dp),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Filled.Search,
+                painter = painterResource(id = R.drawable.ic_launcher_foreground),
                 contentDescription = null,
-                tint = Color(0xFF1B1D22),
-                modifier = Modifier.size(44.dp)
+                tint = Color.Unspecified,
+                modifier = Modifier.size(120.dp) // Filled the box size
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
